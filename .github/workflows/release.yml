@@ -185,7 +185,7 @@ jobs:
         run: |
           mkdir -p release
           # Reusable CI also uploads 0.0.0 test packages. Only publish this version.
-          find artifacts -type f \( -name "waydlp-$V-*" -o -name "waydlp-installer-$V-*" -o -name "waydlp-setup-$V-*" \) -exec cp {} release/ \;
+          find artifacts -type f ! -name '*.wixpdb' \( -name "waydlp-$V-*" -o -name "waydlp-installer-$V-*" -o -name "waydlp-setup-$V-*" \) -exec cp {} release/ \;
           test -n "$(find release -type f -print -quit)"
           cd release && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
       - name: Extract changelog section

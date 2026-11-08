@@ -52,7 +52,8 @@ if command -v appimagetool >/dev/null; then
   echo "==> AppImage"
   "$ROOT/packaging/appimage/build-appimage.sh" "$BIN/waydlp" "$DIST/$NAME.AppImage" "$AI_ARCH"
 else
-  echo "appimagetool not found; skipping AppImage" >&2
+  echo "appimagetool not found; refusing to omit a required release artifact" >&2
+  exit 1
 fi
 
 ( cd "$DIST" && sha256sum "$NAME".* >> SHA256SUMS.txt )

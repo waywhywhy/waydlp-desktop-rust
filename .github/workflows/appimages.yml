@@ -1,0 +1,99 @@
+name: Verify and publish AppImages
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Existing release version without v
+        required: true
+        default: '0.1.0'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: ubuntu-22.04
+            image-arch: x86_64
+          - arch: arm64
+            runner: ubuntu-22.04-arm
+            image-arch: aarch64
+    runs-on: ${{ matrix.runner }}
+    env:
+      V: ${{ inputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate version
+        run: '[[ "$V" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]'
+      - run: ./.github/scripts/linux-deps.sh
+      - run: sudo apt-get install -y xvfb xauth mesa-vulkan-drivers libgl1-mesa-dri libvulkan1
+      - run: ./.github/scripts/install-appimagetool.sh
+      - name: Download and verify release binaries
+        run: |
+          gh release download "v$V" --pattern "waydlp-$V-linux-${{ matrix.arch }}.tar.gz" --pattern SHA256SUMS.txt --dir input
+          (cd input && sha256sum --check --ignore-missing SHA256SUMS.txt)
+          tar -xzf "input/waydlp-$V-linux-${{ matrix.arch }}.tar.gz"
+      - name: Build AppImage
+        run: |
+          mkdir out
+          packaging/appimage/build-appimage.sh "$PWD/waydlp-$V-linux-${{ matrix.arch }}/waydlp" "$PWD/out/waydlp-$V-linux-${{ matrix.arch }}.AppImage" "${{ matrix.image-arch }}"
+      - name: Verify the packaged GUI starts
+        run: |
+          set +e
+          APPIMAGE_EXTRACT_AND_RUN=1 timeout 10 xvfb-run -a "out/waydlp-$V-linux-${{ matrix.arch }}.AppImage" > gui.log 2>&1
+          STATUS=$?
+          set -e
+          cat gui.log
+          test "$STATUS" = 124
+      - uses: actions/upload-artifact@v4
+        with:
+          name: appimage-${{ matrix.arch }}
+          path: out/*.AppImage
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      V: ${{ inputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: appimage-*
+          merge-multiple: true
+          path: out
+      - name: Upload verified packages and clean debug metadata
+        run: |
+          gh release upload "v$V" out/*.AppImage --clobber
+          for ARCH in x64 arm64; do
+            if gh api "repos/$GITHUB_REPOSITORY/releases/tags/v$V" --jq '.assets[].name' | grep -Fxq "waydlp-$V-windows-$ARCH.wixpdb"; then
+              gh release delete-asset "v$V" "waydlp-$V-windows-$ARCH.wixpdb" --yes
+            fi
+          done
+      - name: Refresh complete checksum manifest
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/v$V" > release.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          assets = json.loads(Path('release.json').read_text())['assets']
+          lines = []
+          for asset in sorted(assets, key=lambda a: a['name']):
+              if asset['name'] == 'SHA256SUMS.txt':
+                  continue
+              digest = asset['digest']
+              assert digest.startswith('sha256:')
+              lines.append(f"{digest[7:]}  {asset['name']}\n")
+          Path('SHA256SUMS.txt').write_text(''.join(lines))
+          PY
+          gh release upload "v$V" SHA256SUMS.txt --clobber
