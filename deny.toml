@@ -4,6 +4,14 @@ all-features = true
 
 [advisories]
 yanked = "deny"
+# These are maintenance notices, not reported vulnerabilities. The GUI's
+# accessibility/notification dependencies still use zbus 5; remove these
+# exceptions when those upstream dependencies migrate to zbus 6.
+ignore = [
+  { id = "RUSTSEC-2026-0370", reason = "Transitive zbus 5 wire types; awaiting upstream zbus 6 migration" },
+  { id = "RUSTSEC-2026-0371", reason = "Transitive zbus 5 name types; awaiting upstream zbus 6 migration" },
+  { id = "RUSTSEC-2026-0372", reason = "Transitive zbus 5 derive macros; awaiting upstream zbus 6 migration" },
+]
 
 [licenses]
 # waydlp is GPL-3.0-or-later; every dependency license below is compatible.

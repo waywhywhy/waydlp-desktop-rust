@@ -130,7 +130,7 @@ jobs:
             if ($p.ExitCode -ne 0) { throw "$exe self-test exited with $($p.ExitCode)" }
             $out = Get-Content gui.out -Raw
             if ($out -notmatch 'self-test ok') { throw "$exe did not report success" }
-            if ($out -notmatch "embedded payload=$expect") { throw "$exe: expected payload $expect" }
+            if ($out -notmatch "embedded payload=$expect") { throw "${exe}: expected payload $expect" }
           }
           Test-Gui (Get-Item "out\waydlp-setup-$env:V-windows-${{ matrix.arch }}.exe").FullName 'none'
           Test-Gui (Get-Item "out\waydlp-$env:V-windows-${{ matrix.arch }}-setup.exe").FullName ([regex]::Escape($env:V))
