@@ -8,7 +8,7 @@
 
   ```bash
   # Debian / Ubuntu / Mint
-  sudo apt install build-essential pkg-config libxkbcommon-dev libwayland-dev libx11-dev \
+  sudo apt install build-essential pkg-config libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libx11-dev \
     libxcursor-dev libxrandr-dev libxi-dev libgl1-mesa-dev libdbus-1-dev
   # Fedora
   sudo dnf install gcc pkgconf-pkg-config libxkbcommon-devel wayland-devel libX11-devel \

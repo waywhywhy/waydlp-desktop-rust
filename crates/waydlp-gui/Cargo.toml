@@ -45,7 +45,7 @@ Download video and audio from websites supported by yt-dlp in the format \
 and quality you choose. No accounts, no ads, no tracking."""
 section = "video"
 priority = "optional"
-depends = "$auto"
+depends = "$auto, libxkbcommon0, libxkbcommon-x11-0, libx11-6, libxcursor1, libxrandr2, libxi6, libgl1, libegl1, libwayland-client0"
 recommends = "ffmpeg, yt-dlp"
 assets = [
     ["target/release/waydlp", "usr/bin/", "755"],
@@ -85,6 +85,9 @@ assets = [
 [package.metadata.generate-rpm.recommends]
 ffmpeg = "*"
 yt-dlp = "*"
+
+[package.metadata.generate-rpm.requires]
+"libxkbcommon-x11.so.0()(64bit)" = "*"
 
 # Windows executable icon/metadata
 [target.'cfg(windows)'.build-dependencies]

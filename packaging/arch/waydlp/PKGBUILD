@@ -7,7 +7,7 @@ pkgdesc='Fast, private media downloader powered by yt-dlp and FFmpeg (native Rus
 arch=('x86_64' 'aarch64')
 url='https://github.com/waywhywhy/waydlp-desktop-rust'
 license=('GPL-3.0-or-later')
-depends=('gcc-libs' 'glibc' 'libglvnd' 'libxkbcommon' 'hicolor-icon-theme')
+depends=('gcc-libs' 'glibc' 'libglvnd' 'libxkbcommon' 'libxkbcommon-x11' 'hicolor-icon-theme')
 optdepends=('yt-dlp: media extraction (waydlp can also manage its own copy)'
             'ffmpeg: merging, conversion and embedding'
             'wayland: Wayland support'

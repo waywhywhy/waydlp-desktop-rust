@@ -76,7 +76,7 @@ The full user guide is in [docs/USER_GUIDE.md](docs/USER_GUIDE.md).
 Requirements: a recent stable Rust toolchain (edition 2024), and on Linux the usual X11/Wayland/OpenGL development headers:
 
 ```bash
-sudo apt install pkg-config libxkbcommon-dev libwayland-dev libx11-dev libxcursor-dev libxrandr-dev libxi-dev libgl1-mesa-dev libdbus-1-dev
+sudo apt install pkg-config libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libx11-dev libxcursor-dev libxrandr-dev libxi-dev libgl1-mesa-dev libdbus-1-dev
 ```
 
 ```bash

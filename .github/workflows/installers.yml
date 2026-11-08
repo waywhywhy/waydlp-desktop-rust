@@ -139,7 +139,7 @@ jobs:
       - name: Checksums
         shell: pwsh
         run: |
-          Get-ChildItem out -File | ForEach-Object {
+          Get-ChildItem out -File | Where-Object { $_.Name -ne 'SHA256SUMS.txt' } | ForEach-Object {
             "$((Get-FileHash -Algorithm SHA256 $_.FullName).Hash.ToLower())  $($_.Name)"
           } | Out-File -Encoding ascii out\SHA256SUMS.txt
           Get-Content out\SHA256SUMS.txt
