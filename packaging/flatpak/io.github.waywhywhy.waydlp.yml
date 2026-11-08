@@ -38,6 +38,11 @@ modules:
       - --enable-shared
       - --enable-gpl
       - --disable-ffplay
+      # waydlp uses CPU conversion/remuxing. Avoid SDK NVIDIA headers that
+      # can be newer than this pinned FFmpeg release's supported API.
+      - --disable-nvenc
+      - --disable-nvdec
+      - --disable-cuvid
       - --enable-libdav1d
       - --enable-libvpx
       - --enable-libopus
