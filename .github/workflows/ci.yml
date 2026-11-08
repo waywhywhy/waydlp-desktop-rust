@@ -123,6 +123,8 @@ jobs:
         with:
           targets: x86_64-unknown-linux-gnu
       - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
       - run: ./.github/scripts/linux-deps.sh
       - run: cargo install cargo-deb cargo-generate-rpm --locked
       - run: ./.github/scripts/install-appimagetool.sh

@@ -41,7 +41,11 @@ cargo deb --no-build --no-strip -p waydlp-gui --target "$TRIPLE" --deb-version "
 echo "==> rpm"
 # RPM separates version from release and forbids '-' in Version. A tilde
 # preserves prerelease ordering (0.1.0~rc.1 sorts before 0.1.0).
-RPM_VERSION="${VERSION/-/~}"
+RPM_VERSION="$VERSION"
+if [[ "$VERSION" == *-* ]]; then
+  PRERELEASE="${VERSION#*-}"
+  RPM_VERSION="${VERSION%%-*}~${PRERELEASE//-/_}"
+fi
 cargo generate-rpm -p crates/waydlp-gui --target "$TRIPLE" --set-metadata "version = \"$RPM_VERSION\"" -o "$DIST/$NAME.rpm"
 
 if command -v appimagetool >/dev/null; then
