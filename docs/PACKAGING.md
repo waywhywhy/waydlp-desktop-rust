@@ -30,14 +30,14 @@ All artifacts follow `waydlp-<version>-<os>-<arch>[-variant].<ext>` (implemented
 
 Each job runs a real test on its runner. The CLI installer installs from a freshly built archive, then `verify` (including a tampered-file check), `uninstall`, and finally a check that nothing is left. The GUI installer runs `--self-test`: it opens the real window, renders the wizard for a few frames and exits. On Linux this happens under Xvfb with Mesa software rendering. Windows arm64 uses the `windows-11-arm` runner and Linux arm64 uses `ubuntu-22.04-arm`; both are available to public repositories.
 
-Builds from a branch are named `<ver>-dev.<commit>` and are downloadable from the run's **Artifacts** section. Tagged releases attach them to the draft release.
+Builds from a branch are named `<ver>-dev.<commit>` and are downloadable from the run's **Artifacts** section. Tagged releases attach them to the release.
 
 ## Release process
 
 1. Update `version` in the root `Cargo.toml`, `CHANGELOG.md`, the AppStream `<releases>` and the PKGBUILDs.
 2. Commit, then tag: `git tag v1.2.3 && git push --tags`.
-3. `.github/workflows/release.yml` runs the tests, builds every artifact for x64 and arm64 (where available), merges checksums and creates a **draft** release.
-4. Download and test the draft artifacts (installers, packages, a few downloads), then publish the draft. Versions with a `-suffix` are marked as pre-releases.
+3. `.github/workflows/release.yml` runs formatting, strict linting, tests, audits, real-engine download checks and package installation checks. It then builds every artifact for x64 and arm64 (where available), merges checksums and publishes the release.
+4. Any required check or build failure blocks publication. The YouTube network check is advisory because GitHub runner IPs may be rate-limited; the generated-media real-engine check is required. Versions with a `-suffix` are marked as pre-releases.
 
 ## Windows
 

@@ -39,7 +39,10 @@ echo "==> deb"
 cargo deb --no-build --no-strip -p waydlp-gui --target "$TRIPLE" --deb-version "$VERSION" -o "$DIST/$NAME.deb"
 
 echo "==> rpm"
-cargo generate-rpm -p crates/waydlp-gui --target "$TRIPLE" --set-metadata "version = \"$VERSION\"" -o "$DIST/$NAME.rpm"
+# RPM separates version from release and forbids '-' in Version. A tilde
+# preserves prerelease ordering (0.1.0~rc.1 sorts before 0.1.0).
+RPM_VERSION="${VERSION/-/~}"
+cargo generate-rpm -p crates/waydlp-gui --target "$TRIPLE" --set-metadata "version = \"$RPM_VERSION\"" -o "$DIST/$NAME.rpm"
 
 if command -v appimagetool >/dev/null; then
   echo "==> AppImage"

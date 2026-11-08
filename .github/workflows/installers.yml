@@ -10,7 +10,7 @@ name: Installers
 # install -> verify -> uninstall cycle, and the GUI installer opens its window
 # and renders the wizard (`--self-test`). Standalone binaries are uploaded as
 # workflow artifacts; release.yml calls this workflow to attach them to the
-# draft release.
+# release.
 
 on:
   push:
