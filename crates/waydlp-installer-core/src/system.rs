@@ -115,7 +115,13 @@ pub fn install_command(kind: PackageKind, file: &Path, yes: bool, elevation: Ele
     v
 }
 
-pub fn uninstall_command(kind: PackageKind, yes: bool, elevation: Elevation, rpm_tool: &str) -> Vec<String> {
+pub fn uninstall_command(
+    kind: PackageKind,
+    yes: bool,
+    elevation: Elevation,
+    rpm_tool: &str,
+    arch_package: &str,
+) -> Vec<String> {
     let mut v: Vec<String> = match kind {
         PackageKind::Deb => {
             let mut v = vec!["apt-get".into(), "remove".into()];
@@ -146,7 +152,7 @@ pub fn uninstall_command(kind: PackageKind, yes: bool, elevation: Elevation, rpm
             if yes {
                 v.push("--noconfirm".into());
             }
-            v.push("waydlp".into());
+            v.push(arch_package.into());
             v
         }
         PackageKind::Flatpak => {
@@ -201,10 +207,11 @@ pub fn run(cmd: &[String]) -> Result<(), InstallError> {
 
 /// Is the package currently installed according to the package manager?
 pub fn is_installed(kind: PackageKind) -> Option<bool> {
+    let arch_package = if kind == PackageKind::ArchPkg { arch_package_owner() } else { None };
     let (prog, args): (&str, Vec<&str>) = match kind {
         PackageKind::Deb => ("dpkg-query", vec!["-W", "-f=${Status}", "waydlp"]),
         PackageKind::Rpm => ("rpm", vec!["-q", "waydlp"]),
-        PackageKind::ArchPkg => ("pacman", vec!["-Q", "waydlp"]),
+        PackageKind::ArchPkg => ("pacman", vec!["-Q", arch_package.as_deref().unwrap_or("waydlp")]),
         PackageKind::Flatpak => ("flatpak", vec!["info", "--user", APP_ID]),
         _ => return None,
     };
@@ -213,6 +220,22 @@ pub fn is_installed(kind: PackageKind) -> Option<bool> {
         return Some(out.status.success() && String::from_utf8_lossy(&out.stdout).contains("install ok installed"));
     }
     Some(out.status.success())
+}
+
+fn parse_arch_owner(output: &str) -> Option<String> {
+    match output.trim() {
+        name @ ("waydlp" | "waydlp-bin" | "waydlp-git") => Some(name.into()),
+        _ => None,
+    }
+}
+
+/// Source, prebuilt and git Arch packages have different package names.
+pub fn arch_package_owner() -> Option<String> {
+    let out = Command::new("pacman").args(["-Qoq", "/usr/bin/waydlp"]).output().ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    parse_arch_owner(&String::from_utf8_lossy(&out.stdout))
 }
 
 #[cfg(test)]
@@ -245,16 +268,29 @@ mod tests {
     #[test]
     fn uninstall_commands() {
         assert_eq!(
-            uninstall_command(PackageKind::Deb, true, Elevation::Sudo, ""),
+            uninstall_command(PackageKind::Deb, true, Elevation::Sudo, "", "waydlp"),
             vec!["sudo", "apt-get", "remove", "-y", "waydlp"]
         );
         assert_eq!(
-            uninstall_command(PackageKind::Rpm, true, Elevation::None, "zypper"),
+            uninstall_command(PackageKind::Rpm, true, Elevation::None, "zypper", "waydlp"),
             vec!["zypper", "--non-interactive", "remove", "waydlp"]
         );
         assert_eq!(
-            uninstall_command(PackageKind::Flatpak, false, Elevation::Pkexec, ""),
+            uninstall_command(PackageKind::Flatpak, false, Elevation::Pkexec, "", "waydlp"),
             vec!["flatpak", "uninstall", "--user", APP_ID]
         );
+    }
+
+    #[test]
+    fn arch_package_variants() {
+        for name in ["waydlp", "waydlp-bin", "waydlp-git"] {
+            assert_eq!(parse_arch_owner(&format!("{name}\n")), Some(name.into()));
+            assert_eq!(
+                uninstall_command(PackageKind::ArchPkg, true, Elevation::Sudo, "", name),
+                vec!["sudo", "pacman", "-R", "--noconfirm", name]
+            );
+        }
+        assert_eq!(parse_arch_owner("unrelated-package"), None);
+        assert_eq!(parse_arch_owner("waydlp-bin\nother"), None);
     }
 }

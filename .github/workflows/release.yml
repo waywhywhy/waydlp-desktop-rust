@@ -44,8 +44,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: [x64, arm64]
-    runs-on: windows-latest
+        include:
+          - arch: x64
+            runner: windows-latest
+          - arch: arm64
+            runner: windows-11-arm
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -115,8 +119,14 @@ jobs:
           chown -R builder: /home/builder/pkg
           su builder -c 'makepkg --printsrcinfo > .SRCINFO && makepkg -f --nodeps'
           mkdir -p $GITHUB_WORKSPACE/out
-          cp waydlp-bin-*.pkg.tar.zst "$GITHUB_WORKSPACE/out/waydlp-$V-linux-x64.pkg.tar.zst"
+          PKG=$(find . -maxdepth 1 -type f -name 'waydlp-bin-*.pkg.tar.zst' ! -name 'waydlp-bin-debug-*' -print -quit)
+          test -n "$PKG"
+          cp "$PKG" "$GITHUB_WORKSPACE/out/waydlp-$V-linux-x64.pkg.tar.zst"
           cp .SRCINFO PKGBUILD "$GITHUB_WORKSPACE/out/"
+          pacman -U --noconfirm --nodeps "$PKG"
+          waydlp-cli --version
+          test "$(pacman -Qqo /usr/bin/waydlp)" = waydlp-bin
+          pacman -R --noconfirm waydlp-bin
       - run: cd out && sha256sum *.pkg.tar.zst > SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:

@@ -399,7 +399,14 @@ impl Installer {
         match r.method {
             PackageKind::Deb | PackageKind::Rpm | PackageKind::ArchPkg | PackageKind::Flatpak => {
                 let elevation = if system::is_root() { Elevation::None } else { elevation };
-                let cmd = system::uninstall_command(r.method, assume_yes, elevation, system::rpm_tool());
+                let arch_package = if r.method == PackageKind::ArchPkg { system::arch_package_owner() } else { None };
+                let cmd = system::uninstall_command(
+                    r.method,
+                    assume_yes,
+                    elevation,
+                    system::rpm_tool(),
+                    arch_package.as_deref().unwrap_or("waydlp"),
+                );
                 progress(Progress::Status(format!("Running: {}", cmd.join(" "))));
                 system::run(&cmd)?;
             }
