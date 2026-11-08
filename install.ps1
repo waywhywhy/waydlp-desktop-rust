@@ -13,6 +13,8 @@ param(
     [switch] $Help
 )
 $ErrorActionPreference = 'Stop'
+# Windows PowerShell 5.1's per-chunk progress rendering slows large downloads.
+$ProgressPreference = 'SilentlyContinue'
 if ($Help) {
     Write-Output 'Usage: .\install.ps1 [-Version VERSION] [-InstallDir DIRECTORY] [-NoMenu] [-DesktopShortcut]'
     Write-Output 'Installs the latest stable waydlp for the current user, without administrator access.'
