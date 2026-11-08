@@ -30,7 +30,7 @@ see what's really available, pick a format and quality, and download.
 ## Install
 
 Release artifacts are published on the [Releases page](https://github.com/waywhywhy/waydlp-desktop-rust/releases).
-_No release has been published yet; see [Building from source](#building-from-source)._
+Download **0.1.0** from the [release page](https://github.com/waywhywhy/waydlp-desktop-rust/releases/tag/v0.1.0), or see [Building from source](#building-from-source).
 
 | Platform | Artifact | Notes |
 |---|---|---|

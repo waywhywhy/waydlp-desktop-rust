@@ -76,7 +76,7 @@ jobs:
         run: |
           gh release upload "v$V" out/*.AppImage --clobber
           for ARCH in x64 arm64; do
-            if gh api "repos/$GITHUB_REPOSITORY/releases/tags/v$V" --jq '.assets[].name' | grep -Fxq "waydlp-$V-windows-$ARCH.wixpdb"; then
+            if gh api "repos/$GITHUB_REPOSITORY/releases/tags/v$V" --jq '.assets[].name' | grep -Fx "waydlp-$V-windows-$ARCH.wixpdb" > /dev/null; then
               gh release delete-asset "v$V" "waydlp-$V-windows-$ARCH.wixpdb" --yes
             fi
           done
