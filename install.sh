@@ -56,7 +56,7 @@ fetch() {
 echo "Downloading waydlp $version ($arch)..."
 fetch SHA256SUMS.txt
 fetch "$asset"
-expected=$(awk -v name="$asset" '$2 == name { count++; hash=$1 } END { if (count == 1) print hash }' "$temp_dir/SHA256SUMS.txt")
+expected=$(awk -v name="$asset" '{ sub(/\r$/, "") } $2 == name { count++; hash=$1 } END { if (count == 1) print hash }' "$temp_dir/SHA256SUMS.txt")
 [ "${#expected}" -eq 64 ] || { echo 'Missing or invalid installer checksum.' >&2; exit 1; }
 printf '%s  %s\n' "$expected" "$temp_dir/$asset" | sha256sum --check --status || {
     echo 'Installer checksum mismatch; refusing to execute.' >&2; exit 1;
