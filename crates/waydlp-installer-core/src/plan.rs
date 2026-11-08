@@ -218,7 +218,10 @@ impl Installer {
         records.push(FileRecord { path: marker.clone(), sha256: release::sha256_file(&marker)? });
 
         let mut extra = Vec::new();
+        #[cfg(windows)]
         let mut registry_key = None;
+        #[cfg(not(windows))]
+        let registry_key = None;
         match self.target.os {
             Os::Windows => {
                 #[cfg(windows)]
