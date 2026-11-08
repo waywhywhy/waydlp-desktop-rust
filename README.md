@@ -50,6 +50,47 @@ Every release includes `SHA256SUMS.txt`. Verify a download with `sha256sum -c SH
 
 ### Command-line installer
 
+Install directly from your terminal; no Rust toolchain or administrator access is needed.
+The scripts detect x64/ARM64, verify SHA-256 checksums, and install the latest stable release.
+
+**Windows (PowerShell):**
+
+```powershell
+& ([scriptblock]::Create((irm 'https://github.com/waywhywhy/waydlp-desktop-rust/releases/latest/download/install.ps1')))
+```
+
+**Linux (requires `curl` and `sha256sum`):**
+
+```sh
+curl -fsSL https://github.com/waywhywhy/waydlp-desktop-rust/releases/latest/download/install.sh -o install-waydlp.sh && sh install-waydlp.sh
+```
+
+The default location is `%LOCALAPPDATA%\Programs\waydlp` on Windows and
+`~/.local/opt/waydlp` on Linux. The scripts print the full launch, CLI, verification,
+and uninstall commands; they do not edit your shell profile or PATH. A menu entry is
+created by default. Running the command again upgrades the user installation.
+
+Download [install.ps1](install.ps1) or [install.sh](install.sh) to inspect it or choose a
+version/directory:
+
+```powershell
+.\install.ps1 -Version 0.1.0 -InstallDir 'C:\Tools\waydlp' -NoMenu
+& "$env:LOCALAPPDATA\Programs\waydlp\waydlp-installer.exe" verify # default location
+```
+
+```sh
+sh install.sh --version 0.1.0 --dir "$HOME/Apps/waydlp" --no-menu
+"$HOME/Apps/waydlp/waydlp-installer" verify
+"$HOME/Apps/waydlp/waydlp-installer" uninstall
+```
+
+Both scripts also support a desktop shortcut (`-DesktopShortcut` / `--desktop-shortcut`).
+Linux installs use the tar archive; Windows uses the portable ZIP as a user installation.
+These scripts install the desktop app and its CLI. Android installation still uses the APK.
+
+The included native installer supports additional package formats. Run it using its full
+installed path, or from a portable archive:
+
 ```bash
 waydlp-installer detect                 # platform and available methods
 waydlp-installer install                # best method for this system, latest release

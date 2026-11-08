@@ -234,6 +234,9 @@ impl Installer {
                         if me != un {
                             // Copy only the installer stub, not an appended payload.
                             copy_without_payload(&me, &un)?;
+                            // The archive may already contain a different build of
+                            // the installer. Record only the final installed bytes.
+                            records.retain(|record| record.path != un);
                             records.push(FileRecord { path: un.clone(), sha256: release::sha256_file(&un)? });
                         }
                     }

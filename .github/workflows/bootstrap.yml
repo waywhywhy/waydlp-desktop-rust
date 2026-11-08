@@ -1,0 +1,76 @@
+name: CLI bootstrap installers
+
+on:
+  push:
+    branches: [main]
+    paths: [install.sh, install.ps1, .github/workflows/bootstrap.yml, .github/scripts/test-bootstrap.sh, .github/scripts/test-bootstrap.ps1]
+  pull_request:
+    paths: [install.sh, install.ps1, .github/workflows/bootstrap.yml, .github/scripts/test-bootstrap.sh, .github/scripts/test-bootstrap.ps1]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    name: Linux ${{ matrix.arch }} bootstrap
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x64, runner: ubuntu-latest }
+          - { arch: arm64, runner: ubuntu-24.04-arm }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: sh -n install.sh && sh install.sh --help
+      - name: Reject corrupted and missing checksums
+        run: sh .github/scripts/test-bootstrap.sh
+      - name: Install published release, verify, upgrade and uninstall
+        run: |
+          set -eu
+          export HOME="$RUNNER_TEMP/bootstrap-home"
+          export XDG_DATA_HOME="$HOME/.local/share"
+          mkdir -p "$HOME"
+          sh install.sh --dir "$HOME/custom install" --no-menu
+          "$HOME/custom install/waydlp-cli" --version
+          "$HOME/custom install/waydlp-installer" verify
+          sh install.sh --version 0.1.0 --dir "$HOME/custom install" --no-menu
+          "$HOME/custom install/waydlp-installer" verify
+          cp "$HOME/custom install/waydlp-installer" "$RUNNER_TEMP/uninstaller"
+          "$RUNNER_TEMP/uninstaller" uninstall --yes
+          test ! -e "$HOME/custom install/waydlp-cli"
+  windows:
+    name: Windows ${{ matrix.arch }} bootstrap
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x64, runner: windows-latest }
+          - { arch: arm64, runner: windows-11-arm }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject corrupted and missing checksums
+        shell: pwsh
+        run: ./.github/scripts/test-bootstrap.ps1
+      - name: Install published release, verify, upgrade and uninstall
+        shell: pwsh
+        run: |
+          ./install.ps1 -Help
+          $dir = Join-Path $env:RUNNER_TEMP 'custom install'
+          ./install.ps1 -InstallDir $dir -NoMenu
+          & "$dir/waydlp-cli.exe" --version
+          if ($LASTEXITCODE) { throw 'CLI failed' }
+          & "$dir/waydlp-installer.exe" verify
+          if ($LASTEXITCODE) { throw 'Verification failed' }
+          ./install.ps1 -Version 0.1.0 -InstallDir $dir -NoMenu
+          & "$dir/waydlp-installer.exe" verify
+          if ($LASTEXITCODE) { throw 'Upgrade verification failed' }
+          $uninstaller = Join-Path $env:RUNNER_TEMP 'uninstaller.exe'
+          Copy-Item "$dir/waydlp-installer.exe" $uninstaller
+          & $uninstaller uninstall --yes
+          if ($LASTEXITCODE) { throw 'Uninstall failed' }
+          if (Test-Path "$dir/waydlp-cli.exe") { throw 'CLI was not removed' }

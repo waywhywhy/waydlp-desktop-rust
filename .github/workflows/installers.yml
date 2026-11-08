@@ -100,6 +100,22 @@ jobs:
         run: |
           $cli = (Get-Item "out\waydlp-installer-$env:V-windows-${{ matrix.arch }}.exe").FullName
           $zip = (Get-Item "dist\waydlp-$env:V-windows-${{ matrix.arch }}-portable.zip").FullName
+          # Regression: separately built standalone and bundled installers can
+          # differ. Verification must record the final replacement only.
+          $fixtureDir = Join-Path $env:RUNNER_TEMP 'different-installer'
+          New-Item -ItemType Directory -Force $fixtureDir | Out-Null
+          $fixtureZip = Join-Path $fixtureDir (Split-Path -Leaf $zip)
+          @'
+          import sys, zipfile
+          with zipfile.ZipFile(sys.argv[1]) as source, zipfile.ZipFile(sys.argv[2], 'w') as target:
+              for info in source.infolist():
+                  data = source.read(info)
+                  if info.filename == 'waydlp-installer.exe':
+                      data += b'different bundled installer build'
+                  target.writestr(info, data)
+          '@ | python - $zip $fixtureZip
+          if ($LASTEXITCODE) { throw 'Fixture creation failed' }
+          $zip = $fixtureZip
           & $cli --version; if ($LASTEXITCODE) { throw 'version failed' }
           & $cli detect;    if ($LASTEXITCODE) { throw 'detect failed' }
           & $cli install --yes --file $zip; if ($LASTEXITCODE) { throw 'install failed' }
