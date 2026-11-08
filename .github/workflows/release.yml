@@ -170,9 +170,13 @@ jobs:
         with:
           path: artifacts
       - name: Collect artifacts and merge checksums
+        env:
+          V: ${{ needs.version.outputs.version }}
         run: |
           mkdir -p release
-          find artifacts -type f ! -name SHA256SUMS.txt ! -name PKGBUILD ! -name .SRCINFO -exec cp {} release/ \;
+          # Reusable CI also uploads 0.0.0 test packages. Only publish this version.
+          find artifacts -type f \( -name "waydlp-$V-*" -o -name "waydlp-installer-$V-*" -o -name "waydlp-setup-$V-*" \) -exec cp {} release/ \;
+          test -n "$(find release -type f -print -quit)"
           cd release && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
       - name: Extract changelog section
         run: |
