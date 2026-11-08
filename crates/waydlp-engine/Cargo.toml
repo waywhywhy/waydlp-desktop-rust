@@ -1,0 +1,42 @@
+[package]
+name = "waydlp-engine"
+description = "waydlp download engine: yt-dlp/FFmpeg process management, download queue and verified tool installs"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+waydlp-core.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+reqwest.workspace = true
+futures-util.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+which.workspace = true
+sha2.workspace = true
+hex.workspace = true
+zip.workspace = true
+url.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio = { workspace = true, features = ["test-util"] }
+
+[features]
+# Builds a fake yt-dlp used by the integration tests (never shipped).
+fake-yt-dlp = []
+
+[[bin]]
+name = "waydlp-fake-yt-dlp"
+path = "src/bin/fake_yt_dlp.rs"
+required-features = ["fake-yt-dlp"]
+test = false
+doc = false

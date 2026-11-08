@@ -1,0 +1,247 @@
+name: Installers
+
+# Builds and tests waydlp's two installers on GitHub Actions:
+#
+#   waydlp-installer  CLI installer   (install / uninstall / verify / detect)
+#   waydlp-setup      GUI installer   (wizard; on Windows also bundled as the offline setup.exe)
+#
+# for Windows (x64, arm64) and Linux (x64, arm64). Every x64/arm64 build that
+# can run on its runner is tested for real: the CLI installer does a full
+# install -> verify -> uninstall cycle, and the GUI installer opens its window
+# and renders the wizard (`--self-test`). Standalone binaries are uploaded as
+# workflow artifacts; release.yml calls this workflow to attach them to the
+# draft release.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      version:
+        description: 'Version for file names (without the leading v)'
+        required: true
+        type: string
+      for-release:
+        description: 'Skip uploads that the release workflow already produces'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: installers-${{ github.ref }}-${{ inputs.version || 'ci' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [ -n "$INPUT_VERSION" ]; then V="$INPUT_VERSION"
+          else V="$(grep -m1 '^version' Cargo.toml | sed 's/.*"\(.*\)"/\1/')-dev.$(git rev-parse --short HEAD)"; fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "Installer version: $V"
+
+  windows:
+    name: Windows ${{ matrix.arch }}
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: windows-latest
+            triple: x86_64-pc-windows-msvc
+          - arch: arm64
+            runner: windows-11-arm
+            triple: aarch64-pc-windows-msvc
+    runs-on: ${{ matrix.runner }}
+    env:
+      V: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.triple }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: installers-${{ matrix.arch }}
+
+      # Builds waydlp + both installers, the portable zip and the offline setup.exe.
+      - name: Build
+        shell: pwsh
+        run: pwsh packaging/windows/build-release.ps1 -Version $env:V -Arch ${{ matrix.arch }} -SkipMsi
+
+      - name: Stage standalone installer binaries
+        shell: pwsh
+        run: |
+          $bin = "target\${{ matrix.triple }}\release"
+          New-Item -ItemType Directory -Force out | Out-Null
+          Copy-Item "$bin\waydlp-installer.exe" "out\waydlp-installer-$env:V-windows-${{ matrix.arch }}.exe"
+          Copy-Item "$bin\waydlp-setup.exe" "out\waydlp-setup-$env:V-windows-${{ matrix.arch }}.exe"
+          Copy-Item "dist\waydlp-$env:V-windows-${{ matrix.arch }}-setup.exe" out\
+          Get-ChildItem out
+
+      - name: Test CLI installer (install -> verify -> uninstall)
+        shell: pwsh
+        run: |
+          $cli = (Get-Item "out\waydlp-installer-$env:V-windows-${{ matrix.arch }}.exe").FullName
+          $zip = (Get-Item "dist\waydlp-$env:V-windows-${{ matrix.arch }}-portable.zip").FullName
+          & $cli --version; if ($LASTEXITCODE) { throw 'version failed' }
+          & $cli detect;    if ($LASTEXITCODE) { throw 'detect failed' }
+          & $cli install --yes --file $zip; if ($LASTEXITCODE) { throw 'install failed' }
+          $dir = "$env:LOCALAPPDATA\Programs\waydlp"
+          foreach ($f in 'waydlp.exe', 'waydlp-cli.exe', 'waydlp-installer.exe') {
+            if (-not (Test-Path "$dir\$f")) { throw "$f was not installed" }
+          }
+          if (-not (Test-Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\waydlp")) { throw 'no uninstall entry' }
+          & "$dir\waydlp-cli.exe" --version; if ($LASTEXITCODE) { throw 'installed CLI does not run' }
+          & $cli verify; if ($LASTEXITCODE) { throw 'verify failed' }
+          # Tampering must be detected.
+          Add-Content "$dir\waydlp-cli.exe" 'x'
+          & $cli verify; if (-not $LASTEXITCODE) { throw 'verify missed a modified file' }
+          & $cli uninstall --yes; if ($LASTEXITCODE) { throw 'uninstall failed' }
+          Start-Sleep -Seconds 5
+          if (Test-Path "$dir\waydlp.exe") { throw 'files left after uninstall' }
+          if (Test-Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\waydlp") { throw 'uninstall entry left' }
+          Write-Host 'CLI installer cycle OK'
+
+      - name: Test GUI installer (opens and renders the wizard)
+        shell: pwsh
+        run: |
+          function Test-Gui($exe, $expect) {
+            $p = Start-Process $exe -ArgumentList '--self-test' -PassThru -RedirectStandardOutput gui.out -RedirectStandardError gui.err
+            $null = $p.Handle  # cache the handle so ExitCode is available after exit
+            if (-not $p.WaitForExit(120000)) { $p.Kill(); throw "$exe did not finish its self-test" }
+            Get-Content gui.out, gui.err
+            if ($p.ExitCode -ne 0) { throw "$exe self-test exited with $($p.ExitCode)" }
+            $out = Get-Content gui.out -Raw
+            if ($out -notmatch 'self-test ok') { throw "$exe did not report success" }
+            if ($out -notmatch "embedded payload=$expect") { throw "$exe: expected payload $expect" }
+          }
+          Test-Gui (Get-Item "out\waydlp-setup-$env:V-windows-${{ matrix.arch }}.exe").FullName 'none'
+          Test-Gui (Get-Item "out\waydlp-$env:V-windows-${{ matrix.arch }}-setup.exe").FullName ([regex]::Escape($env:V))
+          Write-Host 'GUI installer self-test OK'
+
+      - name: Checksums
+        shell: pwsh
+        run: |
+          Get-ChildItem out -File | ForEach-Object {
+            "$((Get-FileHash -Algorithm SHA256 $_.FullName).Hash.ToLower())  $($_.Name)"
+          } | Out-File -Encoding ascii out\SHA256SUMS.txt
+          Get-Content out\SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installers-windows-${{ matrix.arch }}
+          path: |
+            out/waydlp-installer-*
+            out/waydlp-setup-*
+            ${{ !inputs.for-release && 'out/*-setup.exe' || '' }}
+            out/SHA256SUMS.txt
+          if-no-files-found: error
+
+  linux:
+    name: Linux ${{ matrix.arch }}
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: ubuntu-22.04
+            triple: x86_64-unknown-linux-gnu
+          - arch: arm64
+            runner: ubuntu-22.04-arm
+            triple: aarch64-unknown-linux-gnu
+    runs-on: ${{ matrix.runner }}
+    env:
+      V: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.triple }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: installers-${{ matrix.arch }}
+      - run: ./.github/scripts/linux-deps.sh
+      # Headless display + software rendering for the GUI self-test.
+      - run: sudo apt-get install -y --no-install-recommends xvfb xauth mesa-vulkan-drivers libgl1-mesa-dri libvulkan1
+
+      - name: Build waydlp and both installers
+        run: cargo build --release --locked --target ${{ matrix.triple }} -p waydlp-gui -p waydlp-cli -p waydlp-installer-cli -p waydlp-installer-gui
+
+      - name: Make the tarball the CLI installer installs
+        run: |
+          BIN=target/${{ matrix.triple }}/release
+          NAME=waydlp-$V-linux-${{ matrix.arch }}
+          S=$(mktemp -d)
+          mkdir -p "$S/$NAME/share/applications" "$S/$NAME/share/metainfo" "$S/$NAME/share/icons"
+          install -m755 $BIN/waydlp $BIN/waydlp-cli $BIN/waydlp-installer $BIN/waydlp-setup "$S/$NAME/"
+          cp -r assets/icons/hicolor "$S/$NAME/share/icons/"
+          install -m644 packaging/linux/io.github.waywhywhy.waydlp.desktop "$S/$NAME/share/applications/"
+          install -m644 packaging/linux/io.github.waywhywhy.waydlp.metainfo.xml "$S/$NAME/share/metainfo/"
+          install -m644 LICENSE "$S/$NAME/LICENSE"
+          install -m644 packaging/linux/README-linux.txt "$S/$NAME/README.txt"
+          touch "$S/$NAME/waydlp.portable"
+          mkdir -p dist && tar -C "$S" -czf "dist/$NAME.tar.gz" "$NAME"
+
+      - name: Stage standalone installer binaries
+        run: |
+          BIN=target/${{ matrix.triple }}/release
+          mkdir -p out
+          install -m755 $BIN/waydlp-installer "out/waydlp-installer-$V-linux-${{ matrix.arch }}"
+          install -m755 $BIN/waydlp-setup "out/waydlp-setup-$V-linux-${{ matrix.arch }}"
+          ls -la out
+
+      - name: Test CLI installer (install -> verify -> uninstall)
+        run: |
+          set -x
+          CLI="$PWD/out/waydlp-installer-$V-linux-${{ matrix.arch }}"
+          TGZ="$PWD/dist/waydlp-$V-linux-${{ matrix.arch }}.tar.gz"
+          "$CLI" --version
+          "$CLI" detect
+          "$CLI" install --yes --file "$TGZ"
+          test -x ~/.local/opt/waydlp/waydlp
+          test -x ~/.local/opt/waydlp/waydlp-cli
+          test -L ~/.local/bin/waydlp
+          test -f ~/.local/share/applications/io.github.waywhywhy.waydlp.desktop
+          ~/.local/opt/waydlp/waydlp-cli --version
+          "$CLI" verify
+          echo x >> ~/.local/opt/waydlp/waydlp-cli
+          if "$CLI" verify; then echo "verify missed a modified file"; exit 1; fi
+          "$CLI" uninstall --yes
+          test ! -e ~/.local/opt/waydlp/waydlp
+          test ! -e ~/.local/bin/waydlp
+          test ! -e ~/.local/share/applications/io.github.waywhywhy.waydlp.desktop
+          echo "CLI installer cycle OK"
+
+      - name: Test GUI installer (opens and renders the wizard)
+        run: |
+          GUI="$PWD/out/waydlp-setup-$V-linux-${{ matrix.arch }}"
+          timeout 120 xvfb-run -a -s "-screen 0 1280x800x24" "$GUI" --self-test | tee gui.out
+          grep -q "self-test ok" gui.out
+          echo "GUI installer self-test OK"
+
+      - name: Checksums
+        run: cd out && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installers-linux-${{ matrix.arch }}
+          path: out/*
+          if-no-files-found: error

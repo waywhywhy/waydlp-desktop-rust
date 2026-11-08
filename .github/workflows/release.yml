@@ -1,0 +1,196 @@
+name: Release
+
+# Builds every artifact for a version tag (vX.Y.Z) and creates a DRAFT GitHub
+# release with SHA256SUMS.txt. A maintainer reviews and publishes the draft
+# after testing; nothing is published as stable automatically.
+
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version without the leading v (e.g. 1.0.0)'
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then V="${{ github.event.inputs.version }}"; else V="${GITHUB_REF_NAME#v}"; fi
+          CARGO_V=$(grep -m1 '^version' Cargo.toml | sed 's/.*"\(.*\)"/\1/')
+          if [ "$V" != "$CARGO_V" ]; then echo "::error::Tag $V does not match Cargo.toml version $CARGO_V"; exit 1; fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+
+  test:
+    needs: version
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - if: runner.os == 'Linux'
+        run: ./.github/scripts/linux-deps.sh
+      - run: cargo test --workspace --all-features --locked
+
+  windows:
+    needs: [version, test]
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, arm64]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.arch == 'x64' && 'x86_64-pc-windows-msvc' || 'aarch64-pc-windows-msvc' }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.arch }}
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - run: dotnet tool install --global wix --version 5.0.2
+      - run: pwsh packaging/windows/build-release.ps1 -Version ${{ needs.version.outputs.version }} -Arch ${{ matrix.arch }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-${{ matrix.arch }}
+          path: dist/*
+
+  linux:
+    needs: [version, test]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: ubuntu-22.04
+          - arch: arm64
+            runner: ubuntu-22.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: ./.github/scripts/linux-deps.sh
+      - run: cargo install cargo-deb cargo-generate-rpm --locked
+      - run: ./.github/scripts/install-appimagetool.sh
+      - run: |
+          TRIPLE=$([ "${{ matrix.arch }}" = x64 ] && echo x86_64-unknown-linux-gnu || echo aarch64-unknown-linux-gnu)
+          rustup target add "$TRIPLE"
+          packaging/linux/build-linux.sh ${{ needs.version.outputs.version }} ${{ matrix.arch }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-${{ matrix.arch }}
+          path: dist/*
+
+  arch:
+    needs: [version, linux]
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-x64
+          path: dist
+      - name: Build Arch package from the release tarball
+        run: |
+          pacman -Syu --noconfirm --needed git
+          useradd -m builder
+          V=${{ needs.version.outputs.version }}
+          mkdir -p /home/builder/pkg && cp packaging/arch/waydlp-bin/PKGBUILD /home/builder/pkg/
+          cp dist/waydlp-$V-linux-x64.tar.gz /home/builder/pkg/
+          cd /home/builder/pkg
+          sed -i "s/^pkgver=.*/pkgver=${V//-/_}/" PKGBUILD
+          sed -i "s|^source_x86_64=.*|source_x86_64=(\"waydlp-$V-linux-x64.tar.gz\")|" PKGBUILD
+          sed -i "s/_pkgname-\$pkgver-linux/_pkgname-$V-linux/" PKGBUILD
+          chown -R builder: /home/builder/pkg
+          su builder -c 'makepkg --printsrcinfo > .SRCINFO && makepkg -f --nodeps'
+          mkdir -p $GITHUB_WORKSPACE/out
+          cp waydlp-bin-*.pkg.tar.zst "$GITHUB_WORKSPACE/out/waydlp-$V-linux-x64.pkg.tar.zst"
+          cp .SRCINFO PKGBUILD "$GITHUB_WORKSPACE/out/"
+      - run: cd out && sha256sum *.pkg.tar.zst > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: arch-x64
+          path: out/*
+
+  flatpak:
+    needs: [version, test]
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:freedesktop-25.08
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate cargo sources for an offline build
+        run: |
+          curl -sSfL -o /tmp/gen.py https://raw.githubusercontent.com/flatpak/flatpak-builder-tools/master/cargo/flatpak-cargo-generator.py
+          pip3 install --break-system-packages aiohttp toml tomlkit || pip3 install aiohttp toml tomlkit
+          python3 /tmp/gen.py Cargo.lock -o packaging/flatpak/cargo-sources.json
+      - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          bundle: waydlp-${{ needs.version.outputs.version }}-linux-x64.flatpak
+          manifest-path: packaging/flatpak/io.github.waywhywhy.waydlp.yml
+          cache-key: flatpak-builder-${{ github.sha }}
+          upload-artifact: false
+      - run: |
+          mkdir -p out && mv waydlp-*.flatpak out/
+          cd out && sha256sum *.flatpak > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: flatpak-x64
+          path: out/*
+
+  installers:
+    # Standalone CLI installer (waydlp-installer) and GUI installer (waydlp-setup)
+    # for Windows and Linux, built and tested by installers.yml.
+    needs: [version, test]
+    uses: ./.github/workflows/installers.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
+      for-release: true
+
+  publish:
+    needs: [version, windows, linux, arch, flatpak, installers]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Collect artifacts and merge checksums
+        run: |
+          mkdir -p release
+          find artifacts -type f ! -name SHA256SUMS.txt ! -name PKGBUILD ! -name .SRCINFO -exec cp {} release/ \;
+          cd release && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
+      - name: Extract changelog section
+        run: |
+          V=${{ needs.version.outputs.version }}
+          awk -v v="## [$V]" 'index($0,v)==1{f=1;next} /^## \[/{if(f)exit} f' CHANGELOG.md > notes.md || true
+          [ -s notes.md ] || echo "See CHANGELOG.md" > notes.md
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V=${{ needs.version.outputs.version }}
+          PRE=""; case "$V" in *-*) PRE="--prerelease";; esac
+          gh release create "v$V" release/* --draft $PRE --title "waydlp $V" --notes-file notes.md

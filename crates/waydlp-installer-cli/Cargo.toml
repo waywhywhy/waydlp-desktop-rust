@@ -1,0 +1,18 @@
+[package]
+name = "waydlp-installer-cli"
+description = "Command-line installer for waydlp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "waydlp-installer"
+path = "src/main.rs"
+
+[dependencies]
+waydlp-core.workspace = true
+waydlp-installer-core.workspace = true
+clap.workspace = true
+anyhow.workspace = true

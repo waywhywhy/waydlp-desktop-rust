@@ -1,0 +1,53 @@
+# Maintainer: waydlp contributors
+# Builds waydlp from the tagged source release.
+pkgname=waydlp
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='Fast, private media downloader powered by yt-dlp and FFmpeg (native Rust GUI)'
+arch=('x86_64' 'aarch64')
+url='https://github.com/waywhywhy/waydlp-desktop-rust'
+license=('GPL-3.0-or-later')
+depends=('gcc-libs' 'glibc' 'libglvnd' 'libxkbcommon' 'hicolor-icon-theme')
+optdepends=('yt-dlp: media extraction (waydlp can also manage its own copy)'
+            'ffmpeg: merging, conversion and embedding'
+            'wayland: Wayland support'
+            'libx11: X11 support')
+makedepends=('cargo')
+provides=('waydlp')
+conflicts=('waydlp-bin' 'waydlp-git')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+# Replace with the real checksum when publishing (run `updpkgsums`).
+sha256sums=('SKIP')
+
+prepare() {
+  cd "waydlp-desktop-rust-$pkgver"
+  export RUSTUP_TOOLCHAIN=stable
+  cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
+}
+
+build() {
+  cd "waydlp-desktop-rust-$pkgver"
+  export RUSTUP_TOOLCHAIN=stable
+  export CARGO_TARGET_DIR=target
+  cargo build --frozen --release -p waydlp-gui -p waydlp-cli
+}
+
+check() {
+  cd "waydlp-desktop-rust-$pkgver"
+  export RUSTUP_TOOLCHAIN=stable
+  cargo test --frozen -p waydlp-core -p waydlp-config -p waydlp-history
+}
+
+package() {
+  cd "waydlp-desktop-rust-$pkgver"
+  install -Dm755 target/release/waydlp "$pkgdir/usr/bin/waydlp"
+  install -Dm755 target/release/waydlp-cli "$pkgdir/usr/bin/waydlp-cli"
+  install -Dm644 packaging/linux/io.github.waywhywhy.waydlp.desktop -t "$pkgdir/usr/share/applications/"
+  install -Dm644 packaging/linux/io.github.waywhywhy.waydlp.metainfo.xml -t "$pkgdir/usr/share/metainfo/"
+  for s in 16 24 32 48 64 128 256 512; do
+    install -Dm644 "assets/icons/hicolor/${s}x${s}/apps/io.github.waywhywhy.waydlp.png" \
+      "$pkgdir/usr/share/icons/hicolor/${s}x${s}/apps/io.github.waywhywhy.waydlp.png"
+  done
+  install -Dm644 packaging/linux/install-kind/arch "$pkgdir/usr/lib/waydlp/install-kind"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

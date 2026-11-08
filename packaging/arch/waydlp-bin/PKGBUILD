@@ -1,0 +1,35 @@
+# Maintainer: waydlp contributors
+# Repackages the prebuilt release archive (no compilation).
+pkgname=waydlp-bin
+_pkgname=waydlp
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='Fast, private media downloader powered by yt-dlp and FFmpeg (prebuilt binary)'
+arch=('x86_64' 'aarch64')
+url='https://github.com/waywhywhy/waydlp-desktop-rust'
+license=('GPL-3.0-or-later')
+depends=('gcc-libs' 'glibc' 'libglvnd' 'libxkbcommon' 'hicolor-icon-theme')
+optdepends=('yt-dlp: media extraction (waydlp can also manage its own copy)'
+            'ffmpeg: merging, conversion and embedding')
+provides=('waydlp')
+conflicts=('waydlp' 'waydlp-git')
+source_x86_64=("$url/releases/download/v$pkgver/$_pkgname-$pkgver-linux-x64.tar.gz")
+source_aarch64=("$url/releases/download/v$pkgver/$_pkgname-$pkgver-linux-arm64.tar.gz")
+# Fill in from the release's SHA256SUMS.txt (or run `updpkgsums`).
+sha256sums_x86_64=('SKIP')
+sha256sums_aarch64=('SKIP')
+
+package() {
+  local a=x64
+  [[ $CARCH == aarch64 ]] && a=arm64
+  cd "$_pkgname-$pkgver-linux-$a"
+  install -Dm755 waydlp "$pkgdir/usr/bin/waydlp"
+  install -Dm755 waydlp-cli "$pkgdir/usr/bin/waydlp-cli"
+  install -Dm644 share/applications/io.github.waywhywhy.waydlp.desktop -t "$pkgdir/usr/share/applications/"
+  install -Dm644 share/metainfo/io.github.waywhywhy.waydlp.metainfo.xml -t "$pkgdir/usr/share/metainfo/"
+  mkdir -p "$pkgdir/usr/share"
+  cp -r share/icons "$pkgdir/usr/share/"
+  install -dm755 "$pkgdir/usr/lib/waydlp"
+  printf 'arch' > "$pkgdir/usr/lib/waydlp/install-kind"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

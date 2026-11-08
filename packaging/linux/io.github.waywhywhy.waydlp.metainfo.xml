@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.waywhywhy.waydlp</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>waydlp</name>
+  <summary>Download video and audio in the format you want</summary>
+  <developer id="io.github.waywhywhy">
+    <name>waydlp contributors</name>
+  </developer>
+  <description>
+    <p>
+      waydlp is a fast, private media downloader powered by yt-dlp and FFmpeg.
+      Paste a link, pick a format and quality, and download — from any website
+      supported by yt-dlp.
+    </p>
+    <ul>
+      <li>Video as MP4, MKV, WebM or MOV, with real quality choices from 144p to 8K</li>
+      <li>Audio as MP3, M4A, Opus, FLAC, WAV or OGG with optional loudness normalisation</li>
+      <li>Playlists with item selection, batch downloads and a download queue</li>
+      <li>Subtitles, thumbnails, chapters and metadata embedding</li>
+      <li>No accounts, no ads and no tracking</li>
+    </ul>
+    <p>Only download media you have the right to access. waydlp does not circumvent DRM.</p>
+  </description>
+  <launchable type="desktop-id">io.github.waywhywhy.waydlp.desktop</launchable>
+  <url type="homepage">https://github.com/waywhywhy/waydlp-desktop-rust</url>
+  <url type="bugtracker">https://github.com/waywhywhy/waydlp-desktop-rust/issues</url>
+  <url type="vcs-browser">https://github.com/waywhywhy/waydlp-desktop-rust</url>
+  <content_rating type="oars-1.1" />
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </supports>
+  <categories>
+    <category>AudioVideo</category>
+    <category>Network</category>
+  </categories>
+  <releases>
+    <release version="0.1.0" date="2026-11-04" type="development">
+      <description><p>First development release.</p></description>
+    </release>
+  </releases>
+</component>

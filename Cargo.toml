@@ -1,0 +1,96 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/waydlp-core",
+    "crates/waydlp-engine",
+    "crates/waydlp-config",
+    "crates/waydlp-history",
+    "crates/waydlp-platform",
+    "crates/waydlp-theme",
+    "crates/waydlp-gui",
+    "crates/waydlp-cli",
+    "crates/waydlp-installer-core",
+    "crates/waydlp-installer-cli",
+    "crates/waydlp-installer-gui",
+]
+default-members = [
+    "crates/waydlp-core",
+    "crates/waydlp-engine",
+    "crates/waydlp-config",
+    "crates/waydlp-history",
+    "crates/waydlp-platform",
+    "crates/waydlp-theme",
+    "crates/waydlp-gui",
+    "crates/waydlp-cli",
+    "crates/waydlp-installer-core",
+    "crates/waydlp-installer-cli",
+    "crates/waydlp-installer-gui",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+authors = ["waydlp contributors"]
+repository = "https://github.com/waywhywhy/waydlp-desktop-rust"
+homepage = "https://github.com/waywhywhy/waydlp-desktop-rust"
+description = "waydlp: a fast, private, native media downloader powered by yt-dlp and FFmpeg"
+
+[workspace.dependencies]
+# Internal crates
+waydlp-core = { path = "crates/waydlp-core" }
+waydlp-engine = { path = "crates/waydlp-engine" }
+waydlp-config = { path = "crates/waydlp-config" }
+waydlp-history = { path = "crates/waydlp-history" }
+waydlp-platform = { path = "crates/waydlp-platform" }
+waydlp-theme = { path = "crates/waydlp-theme" }
+waydlp-installer-core = { path = "crates/waydlp-installer-core" }
+
+# External crates
+anyhow = "1.0"
+thiserror = "2.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "1.2"
+url = "2.5"
+regex = "1.13"
+shell-words = "1.1"
+tokio = { version = "1.54", features = ["rt-multi-thread", "macros", "process", "io-util", "sync", "time", "fs", "signal"] }
+tokio-util = "0.7"
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "json", "stream"] }
+futures-util = "0.3"
+rusqlite = { version = "0.41", features = ["bundled"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "std", "serde"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+tracing-appender = "0.2"
+directories = "6.0"
+which = "8.0"
+sha2 = "0.11"
+hex = "0.4"
+zip = { version = "9.3", default-features = false, features = ["deflate"] }
+flate2 = "1.1"
+tar = "0.4"
+semver = "1.0"
+clap = { version = "4.6", features = ["derive"] }
+eframe = { version = "0.37", default-features = false, features = ["accesskit", "default_fonts", "wgpu", "glow", "wayland", "x11", "persistence"] }
+egui = { version = "0.37", features = ["monochrome_emoji_fonts"] }
+egui_extras = { version = "0.37", features = ["image", "http"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif"] }
+rfd = "0.17"
+arboard = "3.7"
+opener = { version = "0.9", features = ["reveal"] }
+notify-rust = "4.18"
+tempfile = "3.27"
+libc = "0.2"
+winreg = "0.56"
+mslnk = "0.1"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
+opt-level = 3
+
+[profile.dev.package."*"]
+opt-level = 2

@@ -1,0 +1,95 @@
+# Flatpak manifest for waydlp (prepared for Flathub; NOT published yet).
+#
+# Build locally:
+#   python3 flatpak-cargo-generator.py ../../Cargo.lock -o cargo-sources.json
+#   flatpak-builder --user --install --force-clean build-dir io.github.waywhywhy.waydlp.yml
+#   flatpak run io.github.waywhywhy.waydlp
+# Bundle (release artifact):
+#   flatpak build-bundle ~/.local/share/flatpak/repo waydlp-<ver>-linux-x64.flatpak io.github.waywhywhy.waydlp
+#
+# flatpak-cargo-generator.py comes from https://github.com/flatpak/flatpak-builder-tools
+app-id: io.github.waywhywhy.waydlp
+runtime: org.freedesktop.Platform
+runtime-version: '25.08'
+sdk: org.freedesktop.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+command: waydlp
+finish-args:
+  - --share=network            # downloading media is the purpose of the app
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri               # OpenGL rendering
+  - --filesystem=xdg-download  # default save location; other folders via the file chooser portal
+  - --talk-name=org.freedesktop.Notifications
+build-options:
+  append-path: /usr/lib/sdk/rust-stable/bin
+  env:
+    CARGO_HOME: /run/build/waydlp/cargo
+modules:
+  # FFmpeg CLI tools built from the official release tarball.
+  - name: ffmpeg
+    config-opts:
+      - --prefix=/app
+      - --disable-doc
+      - --disable-debug
+      - --disable-static
+      - --enable-shared
+      - --enable-gpl
+      - --disable-ffplay
+      - --enable-libdav1d
+      - --enable-libvpx
+      - --enable-libopus
+      - --enable-libvorbis
+      - --enable-libmp3lame
+    cleanup:
+      - /include
+      - /lib/pkgconfig
+      - /share/ffmpeg/examples
+    sources:
+      - type: archive
+        url: https://ffmpeg.org/releases/ffmpeg-8.1.tar.xz
+        sha256: b072aed6871998cce9b36e7774033105ca29e33632be5b6347f3206898e0756a
+    modules:
+      - name: lame
+        config-opts: [--disable-static, --disable-frontend]
+        cleanup: [/include, /share]
+        sources:
+          - type: archive
+            url: https://downloads.sourceforge.net/project/lame/lame/3.100/lame-3.100.tar.gz
+            sha256: ddfe36cab873794038ae2c1210557ad34857a4b6bdc515785d1da9e175b1da1e
+
+  # yt-dlp standalone build (pinned). waydlp can also manage its own,
+  # newer copy inside the sandbox's data directory from Settings.
+  - name: yt-dlp
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 yt-dlp /app/bin/yt-dlp
+    sources:
+      - type: file
+        only-arches: [x86_64]
+        url: https://github.com/yt-dlp/yt-dlp/releases/download/2026.10.26/yt-dlp_linux
+        sha256: 767ba9dce7052aa196f8b12652f433d76de128ba168966fa84b6394d5e6c6795
+        dest-filename: yt-dlp
+      - type: file
+        only-arches: [aarch64]
+        url: https://github.com/yt-dlp/yt-dlp/releases/download/2026.10.26/yt-dlp_linux_aarch64
+        sha256: e87e9533e89fe5889abaa21f5114dfe7756d6aa6219b83551add04d48b18e483
+        dest-filename: yt-dlp
+
+  - name: waydlp
+    buildsystem: simple
+    build-commands:
+      - cargo --offline fetch --manifest-path Cargo.toml --verbose
+      - cargo --offline build --release --locked -p waydlp-gui -p waydlp-cli
+      - install -Dm755 target/release/waydlp /app/bin/waydlp
+      - install -Dm755 target/release/waydlp-cli /app/bin/waydlp-cli
+      - install -Dm644 packaging/linux/io.github.waywhywhy.waydlp.desktop /app/share/applications/io.github.waywhywhy.waydlp.desktop
+      - install -Dm644 packaging/linux/io.github.waywhywhy.waydlp.metainfo.xml /app/share/metainfo/io.github.waywhywhy.waydlp.metainfo.xml
+      - install -Dm644 assets/icons/waydlp.svg /app/share/icons/hicolor/scalable/apps/io.github.waywhywhy.waydlp.svg
+      - for s in 16 24 32 48 64 128 256 512; do install -Dm644 assets/icons/hicolor/${s}x${s}/apps/io.github.waywhywhy.waydlp.png /app/share/icons/hicolor/${s}x${s}/apps/io.github.waywhywhy.waydlp.png; done
+    sources:
+      - type: dir
+        path: ../..
+      - cargo-sources.json

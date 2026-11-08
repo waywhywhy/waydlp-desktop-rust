@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  waydlp MSI (WiX Toolset v5). Per-machine install into Program Files, for
+  administrators and managed deployments. The setup .exe offers a per-user
+  install that needs no administrator rights.
+
+  Build (see build-release.ps1):
+    wix build waydlp.wxs -arch x64 -d Version=1.0.0 -d BinDir=..\..\target\release
+      -d AssetsDir=..\..\assets\icons -d RootDir=..\.. -o waydlp-1.0.0-windows-x64.msi
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="waydlp"
+           Manufacturer="waydlp contributors"
+           Version="$(var.Version)"
+           UpgradeCode="9B34BFFB-7AE1-482D-8F46-ECAC1651111D"
+           Scope="perMachine"
+           Compressed="yes"
+           Language="1033">
+    <SummaryInformation Description="waydlp — media downloader powered by yt-dlp and FFmpeg" />
+    <MajorUpgrade DowngradeErrorMessage="A newer version of waydlp is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Icon Id="waydlp.ico" SourceFile="$(var.AssetsDir)\waydlp.ico" />
+    <Property Id="ARPPRODUCTICON" Value="waydlp.ico" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/waywhywhy/waydlp-desktop-rust" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/waywhywhy/waydlp-desktop-rust/issues" />
+    <Property Id="ARPNOMODIFY" Value="1" />
+
+    <StandardDirectory Id="ProgramFiles6432Folder">
+      <Directory Id="INSTALLFOLDER" Name="waydlp">
+        <Component Id="AppExe">
+          <File Id="WaydlpExe" Source="$(var.BinDir)\waydlp.exe" KeyPath="yes">
+            <Shortcut Id="StartMenuShortcut"
+                      Directory="ProgramMenuFolder"
+                      Name="waydlp"
+                      Description="Download video and audio"
+                      WorkingDirectory="INSTALLFOLDER"
+                      Icon="waydlp.ico"
+                      Advertise="yes" />
+          </File>
+        </Component>
+        <Component Id="CliExe">
+          <File Id="WaydlpCliExe" Source="$(var.BinDir)\waydlp-cli.exe" KeyPath="yes" />
+        </Component>
+        <Component Id="InstallKind">
+          <File Id="InstallKindFile" Source="$(var.RootDir)\packaging\windows\install-kind-msi" Name="install-kind" KeyPath="yes" />
+        </Component>
+        <Component Id="LicenseFile">
+          <File Id="LicenseTxt" Source="$(var.RootDir)\LICENSE" Name="LICENSE.txt" KeyPath="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder" />
+
+    <Feature Id="Main" Title="waydlp" Level="1">
+      <ComponentRef Id="AppExe" />
+      <ComponentRef Id="CliExe" />
+      <ComponentRef Id="InstallKind" />
+      <ComponentRef Id="LicenseFile" />
+    </Feature>
+  </Package>
+</Wix>

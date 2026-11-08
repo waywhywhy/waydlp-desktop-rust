@@ -1,0 +1,19 @@
+[package]
+name = "waydlp-platform"
+description = "OS integration for waydlp: paths, portable mode, install-kind detection, logging"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+directories.workspace = true
+opener.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tracing-appender.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

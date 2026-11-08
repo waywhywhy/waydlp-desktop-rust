@@ -1,0 +1,91 @@
+[package]
+name = "waydlp-gui"
+description = "waydlp desktop application (native Rust GUI)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "waydlp"
+path = "src/main.rs"
+
+[dependencies]
+waydlp-core.workspace = true
+waydlp-engine.workspace = true
+waydlp-config.workspace = true
+waydlp-history.workspace = true
+waydlp-platform.workspace = true
+waydlp-theme.workspace = true
+eframe.workspace = true
+egui.workspace = true
+egui_extras.workspace = true
+image.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+serde_json.workspace = true
+url.workspace = true
+rfd.workspace = true
+arboard.workspace = true
+notify-rust.workspace = true
+chrono.workspace = true
+
+# ---------------------------------------------------------------- packaging
+# `cargo deb -p waydlp-gui` (https://github.com/kornelski/cargo-deb)
+[package.metadata.deb]
+name = "waydlp"
+maintainer = "waydlp contributors"
+copyright = "waydlp contributors"
+license-file = ["../../LICENSE", "0"]
+extended-description = """\
+waydlp is a fast, private media downloader powered by yt-dlp and FFmpeg. \
+Download video and audio from websites supported by yt-dlp in the format \
+and quality you choose. No accounts, no ads, no tracking."""
+section = "video"
+priority = "optional"
+depends = "$auto"
+recommends = "ffmpeg, yt-dlp"
+assets = [
+    ["target/release/waydlp", "usr/bin/", "755"],
+    ["target/release/waydlp-cli", "usr/bin/", "755"],
+    ["../../packaging/linux/io.github.waywhywhy.waydlp.desktop", "usr/share/applications/", "644"],
+    ["../../packaging/linux/io.github.waywhywhy.waydlp.metainfo.xml", "usr/share/metainfo/", "644"],
+    ["../../packaging/linux/install-kind/deb", "usr/lib/waydlp/install-kind", "644"],
+    ["../../assets/icons/waydlp.svg", "usr/share/icons/hicolor/scalable/apps/io.github.waywhywhy.waydlp.svg", "644"],
+    ["../../assets/icons/hicolor/16x16/apps/io.github.waywhywhy.waydlp.png", "usr/share/icons/hicolor/16x16/apps/", "644"],
+    ["../../assets/icons/hicolor/32x32/apps/io.github.waywhywhy.waydlp.png", "usr/share/icons/hicolor/32x32/apps/", "644"],
+    ["../../assets/icons/hicolor/48x48/apps/io.github.waywhywhy.waydlp.png", "usr/share/icons/hicolor/48x48/apps/", "644"],
+    ["../../assets/icons/hicolor/64x64/apps/io.github.waywhywhy.waydlp.png", "usr/share/icons/hicolor/64x64/apps/", "644"],
+    ["../../assets/icons/hicolor/128x128/apps/io.github.waywhywhy.waydlp.png", "usr/share/icons/hicolor/128x128/apps/", "644"],
+    ["../../assets/icons/hicolor/256x256/apps/io.github.waywhywhy.waydlp.png", "usr/share/icons/hicolor/256x256/apps/", "644"],
+    ["../../assets/icons/hicolor/512x512/apps/io.github.waywhywhy.waydlp.png", "usr/share/icons/hicolor/512x512/apps/", "644"],
+]
+
+# `cargo generate-rpm -p crates/waydlp-gui` (https://github.com/cat-in-136/cargo-generate-rpm)
+[package.metadata.generate-rpm]
+name = "waydlp"
+summary = "Fast, private media downloader powered by yt-dlp and FFmpeg"
+license = "GPL-3.0-or-later"
+assets = [
+    { source = "target/release/waydlp", dest = "/usr/bin/waydlp", mode = "755" },
+    { source = "target/release/waydlp-cli", dest = "/usr/bin/waydlp-cli", mode = "755" },
+    { source = "../../packaging/linux/io.github.waywhywhy.waydlp.desktop", dest = "/usr/share/applications/io.github.waywhywhy.waydlp.desktop", mode = "644" },
+    { source = "../../packaging/linux/io.github.waywhywhy.waydlp.metainfo.xml", dest = "/usr/share/metainfo/io.github.waywhywhy.waydlp.metainfo.xml", mode = "644" },
+    { source = "../../packaging/linux/install-kind/rpm", dest = "/usr/lib/waydlp/install-kind", mode = "644" },
+    { source = "../../assets/icons/waydlp.svg", dest = "/usr/share/icons/hicolor/scalable/apps/io.github.waywhywhy.waydlp.svg", mode = "644" },
+    { source = "../../assets/icons/hicolor/256x256/apps/io.github.waywhywhy.waydlp.png", dest = "/usr/share/icons/hicolor/256x256/apps/io.github.waywhywhy.waydlp.png", mode = "644" },
+    { source = "../../assets/icons/hicolor/128x128/apps/io.github.waywhywhy.waydlp.png", dest = "/usr/share/icons/hicolor/128x128/apps/io.github.waywhywhy.waydlp.png", mode = "644" },
+    { source = "../../assets/icons/hicolor/64x64/apps/io.github.waywhywhy.waydlp.png", dest = "/usr/share/icons/hicolor/64x64/apps/io.github.waywhywhy.waydlp.png", mode = "644" },
+    { source = "../../assets/icons/hicolor/48x48/apps/io.github.waywhywhy.waydlp.png", dest = "/usr/share/icons/hicolor/48x48/apps/io.github.waywhywhy.waydlp.png", mode = "644" },
+    { source = "../../assets/icons/hicolor/32x32/apps/io.github.waywhywhy.waydlp.png", dest = "/usr/share/icons/hicolor/32x32/apps/io.github.waywhywhy.waydlp.png", mode = "644" },
+    { source = "../../LICENSE", dest = "/usr/share/licenses/waydlp/LICENSE", mode = "644", doc = true },
+]
+[package.metadata.generate-rpm.recommends]
+ffmpeg = "*"
+yt-dlp = "*"
+
+# Windows executable icon/metadata
+[target.'cfg(windows)'.build-dependencies]
+winresource = "0.1"

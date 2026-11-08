@@ -1,0 +1,18 @@
+[package]
+name = "waydlp-core"
+description = "Pure domain logic for waydlp: URL handling, yt-dlp argument building, progress and error parsing"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+url.workspace = true
+regex.workspace = true
+shell-words.workspace = true
+
+[dev-dependencies]

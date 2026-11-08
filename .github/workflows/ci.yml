@@ -1,0 +1,173 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  fmt:
+    name: Formatting
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --all --check
+
+  clippy:
+    name: Clippy (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: ./.github/scripts/linux-deps.sh
+      - run: cargo clippy --workspace --all-targets --all-features --locked
+
+  test:
+    name: Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: ./.github/scripts/linux-deps.sh
+      # Unit tests + engine integration tests against a fake yt-dlp (deterministic, offline).
+      - run: cargo test --workspace --all-features --locked
+
+  network-smoke:
+    # Real-world check against yt-dlp and a Creative Commons test video.
+    # Network-dependent, so it never blocks merging.
+    name: Real yt-dlp smoke test
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: ./.github/scripts/linux-deps.sh && sudo apt-get install -y ffmpeg
+      - run: cargo build -p waydlp-cli --locked
+      - name: Install managed yt-dlp (checksum-verified)
+        run: target/debug/waydlp-cli install-tool yt-dlp
+      - name: Analyze
+        run: target/debug/waydlp-cli analyze "https://www.youtube.com/watch?v=aqz-KE-bpKQ"
+      - name: Download smallest audio stream and convert to MP3
+        run: |
+          target/debug/waydlp-cli download --no-history --audio mp3 --bitrate 128 -o out "https://www.youtube.com/watch?v=aqz-KE-bpKQ"
+          ls -la out
+          ffprobe -v error -show_entries stream=codec_name -of csv out/*.mp3 | grep -q mp3
+
+  security:
+    name: Dependency audit (cargo-deny)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check advisories licenses bans sources
+
+  packages:
+    name: Linux package smoke build
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+      - uses: Swatinem/rust-cache@v2
+      - run: ./.github/scripts/linux-deps.sh
+      - run: cargo install cargo-deb cargo-generate-rpm --locked
+      - run: ./.github/scripts/install-appimagetool.sh
+      - run: packaging/linux/build-linux.sh 0.0.0-ci x64
+      - name: Inspect packages
+        run: |
+          dpkg-deb --info dist/waydlp-0.0.0-ci-linux-x64.deb
+          dpkg-deb --contents dist/waydlp-0.0.0-ci-linux-x64.deb
+          rpm -qpil dist/waydlp-0.0.0-ci-linux-x64.rpm
+          tar -tzf dist/waydlp-0.0.0-ci-linux-x64.tar.gz
+          desktop-file-validate packaging/linux/io.github.waywhywhy.waydlp.desktop
+          appstreamcli validate --no-net packaging/linux/io.github.waywhywhy.waydlp.metainfo.xml || true
+      - name: Install the .deb and run the CLI
+        run: |
+          sudo apt-get install -y ./dist/waydlp-0.0.0-ci-linux-x64.deb
+          waydlp-cli --version
+          waydlp-cli paths
+          sudo apt-get remove -y waydlp
+      - name: User install from tarball with the CLI installer
+        run: |
+          tar -xzf dist/waydlp-0.0.0-ci-linux-x64.tar.gz
+          ./waydlp-0.0.0-ci-linux-x64/waydlp-installer install --yes --file dist/waydlp-0.0.0-ci-linux-x64.tar.gz
+          test -x ~/.local/opt/waydlp/waydlp
+          test -f ~/.local/share/applications/io.github.waywhywhy.waydlp.desktop
+          ./waydlp-0.0.0-ci-linux-x64/waydlp-installer verify
+          ./waydlp-0.0.0-ci-linux-x64/waydlp-installer uninstall --yes
+          test ! -e ~/.local/opt/waydlp/waydlp
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ci-linux-packages
+          path: dist/
+          retention-days: 7
+
+  windows-installer:
+    name: Windows installer smoke build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - run: dotnet tool install --global wix --version 5.0.2
+      - run: pwsh packaging/windows/build-release.ps1 -Version 0.0.0 -Arch x64
+      - name: Install per-user from the portable zip, verify, uninstall
+        shell: pwsh
+        run: |
+          $zip = Get-Item dist\waydlp-0.0.0-windows-x64-portable.zip
+          Expand-Archive $zip.FullName -DestinationPath tmp-portable
+          .\tmp-portable\waydlp-installer.exe install --yes --file $zip.FullName
+          if (-not (Test-Path "$env:LOCALAPPDATA\Programs\waydlp\waydlp.exe")) { throw 'not installed' }
+          .\tmp-portable\waydlp-installer.exe verify
+          .\tmp-portable\waydlp-installer.exe uninstall --yes
+      - name: Install and remove the MSI
+        shell: pwsh
+        run: |
+          $msi = (Get-Item dist\waydlp-0.0.0-windows-x64.msi).FullName
+          Start-Process msiexec -ArgumentList "/i `"$msi`" /qn /l*v msi-install.log" -Wait
+          if (-not (Test-Path "$env:ProgramFiles\waydlp\waydlp.exe")) { Get-Content msi-install.log -Tail 50; throw 'MSI did not install' }
+          Start-Process msiexec -ArgumentList "/x `"$msi`" /qn" -Wait
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ci-windows-packages
+          path: dist/
+          retention-days: 7

@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=waydlp
+GenericName=Media Downloader
+Comment=Download video and audio from websites supported by yt-dlp
+Exec=waydlp %u
+Icon=io.github.waywhywhy.waydlp
+Terminal=false
+Categories=AudioVideo;Network;FileTransfer;
+Keywords=download;video;audio;music;youtube;yt-dlp;
+StartupWMClass=io.github.waywhywhy.waydlp
+StartupNotify=true

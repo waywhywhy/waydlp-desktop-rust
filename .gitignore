@@ -1,0 +1,16 @@
+/target
+/dist
+**/*.rs.bk
+*.pdb
+# Flatpak build outputs
+/build-dir
+/.flatpak-builder
+packaging/flatpak/cargo-sources.json
+# Local portable-mode data from running debug builds
+/target/**/data
+# Editors / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
