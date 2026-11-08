@@ -32,11 +32,10 @@ jobs:
       - run: target/debug/waydlp-cli install-tool yt-dlp
       - name: Test generated media through the real engine
         run: |
-          python3 .github/scripts/serve-fixture.py > fixture.log 2>&1 &
-          for i in {1..30}; do curl -fsS http://localhost:8765/tone.wav -o /dev/null && break; sleep 1; done
-          target/debug/waydlp-cli analyze http://localhost:8765/tone.wav
-          target/debug/waydlp-cli download --no-history --video original -o out/original http://localhost:8765/tone.wav
-          target/debug/waydlp-cli download --no-history --audio mp3 --bitrate 128 -o out/mp3 http://localhost:8765/tone.wav
+          URL="https://raw.githubusercontent.com/$GITHUB_REPOSITORY/$GITHUB_SHA/.github/fixtures/tone.wav"
+          target/debug/waydlp-cli analyze "$URL"
+          target/debug/waydlp-cli download --no-history --video original -o out/original "$URL"
+          target/debug/waydlp-cli download --no-history --audio mp3 --bitrate 128 -o out/mp3 "$URL"
           ffprobe -v error -show_entries stream=codec_name -of csv out/original/*.wav | grep -q pcm_s16le
           ffprobe -v error -show_entries stream=codec_name -of csv out/mp3/*.mp3 | grep -q mp3
   fmt:
