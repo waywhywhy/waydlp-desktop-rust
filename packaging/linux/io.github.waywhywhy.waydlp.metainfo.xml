@@ -37,6 +37,11 @@
     <category>Network</category>
   </categories>
   <releases>
+    <release version="0.2.0" date="2026-11-13" type="development">
+      <description>
+        <p>Optional automatic yt-dlp updates, a warning when yt-dlp is outdated, "Retry failed" in the queue, and many fixes.</p>
+      </description>
+    </release>
     <release version="0.1.0" date="2026-11-04" type="development">
       <description><p>First development release.</p></description>
     </release>

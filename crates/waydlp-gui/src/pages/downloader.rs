@@ -15,6 +15,7 @@ impl WaydlpApp {
         ui.add_space(8.0);
         waydlp_theme::card().show(ui, |ui| self.url_bar(ui, false));
         ui.add_space(14.0);
+        self.stale_yt_dlp_banner(ui);
 
         enum View {
             Idle,

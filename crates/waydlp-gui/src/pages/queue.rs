@@ -19,6 +19,10 @@ impl WaydlpApp {
                 if ui.button("⏸ Pause all").clicked() {
                     self.queue.pause_all();
                 }
+                let failed = self.jobs.values().filter(|j| j.state == JobState::Failed).count();
+                if failed > 0 && ui.button(format!("↻ Retry failed ({failed})")).clicked() {
+                    self.queue.retry_failed();
+                }
             });
         });
         ui.horizontal(|ui| {

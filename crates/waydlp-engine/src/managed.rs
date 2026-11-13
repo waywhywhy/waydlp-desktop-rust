@@ -182,6 +182,29 @@ impl ManagedTools {
     }
 }
 
+/// Age in days of a date-based yt-dlp version (`2026.07.04`) at `now`.
+/// `None` for versions that aren't dates (e.g. nightly builds with other schemes).
+pub fn yt_dlp_age_days(version: &str, now: std::time::SystemTime) -> Option<u64> {
+    let mut parts = version.trim().trim_start_matches('v').split('.');
+    let (y, m, d): (i64, i64, i64) =
+        (parts.next()?.parse().ok()?, parts.next()?.parse().ok()?, parts.next()?.parse().ok()?);
+    if !(2000..=9999).contains(&y) || !(1..=12).contains(&m) || !(1..=31).contains(&d) {
+        return None;
+    }
+    // Days since 1970-01-01 for a proleptic Gregorian date (H. Hinnant's algorithm).
+    let (yy, mm) = if m <= 2 { (y - 1, m + 9) } else { (y, m - 3) };
+    let era = yy.div_euclid(400);
+    let yoe = yy - era * 400;
+    let doy = (153 * mm + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    let released = era * 146_097 + doe - 719_468;
+    let today = now.duration_since(std::time::UNIX_EPOCH).ok()?.as_secs() as i64 / 86_400;
+    Some((today - released).max(0) as u64)
+}
+
+/// yt-dlp itself warns once a version is older than this; sites start failing.
+pub const YT_DLP_STALE_DAYS: u64 = 90;
+
 /// Compare yt-dlp's date-based versions (`2026.07.04`, `2026.07.04.1`).
 pub fn yt_dlp_version_is_newer(latest: &str, installed: &str) -> bool {
     let parse =
@@ -248,6 +271,20 @@ fn make_executable(_p: &Path) -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn yt_dlp_age() {
+        use std::time::{Duration, UNIX_EPOCH};
+        let day = |n: u64| UNIX_EPOCH + Duration::from_secs(n * 86_400 + 3_600);
+        // 1970-01-01 is day 0; 2026-11-13 is day 20_770.
+        assert_eq!(yt_dlp_age_days("1970.01.01", day(0)), None); // before 2000: not a yt-dlp version
+        assert_eq!(yt_dlp_age_days("2026.11.13", day(20_770)), Some(0));
+        assert_eq!(yt_dlp_age_days("2025.11.12", day(20_770)), Some(366));
+        assert_eq!(yt_dlp_age_days("2024.02.29", day(19_782)), Some(0)); // leap day
+        assert_eq!(yt_dlp_age_days("2026.07.04.1", day(20_770)), Some(132));
+        assert_eq!(yt_dlp_age_days("nightly", day(20_770)), None);
+        assert_eq!(yt_dlp_age_days("2030.01.01", day(20_770)), Some(0)); // future: not negative
+    }
 
     #[test]
     fn version_compare() {

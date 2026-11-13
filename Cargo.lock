@@ -4853,7 +4853,7 @@ dependencies = [
 
 [[package]]
 name = "waydlp-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -4870,7 +4870,7 @@ dependencies = [
 
 [[package]]
 name = "waydlp-config"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde",
  "tempfile",
@@ -4882,7 +4882,7 @@ dependencies = [
 
 [[package]]
 name = "waydlp-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "regex",
  "serde",
@@ -4894,7 +4894,7 @@ dependencies = [
 
 [[package]]
 name = "waydlp-engine"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "futures-util",
  "hex",
@@ -4916,7 +4916,7 @@ dependencies = [
 
 [[package]]
 name = "waydlp-gui"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "arboard",
  "chrono",
@@ -4942,7 +4942,7 @@ dependencies = [
 
 [[package]]
 name = "waydlp-history"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "rusqlite",
@@ -4953,7 +4953,7 @@ dependencies = [
 
 [[package]]
 name = "waydlp-installer-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -4963,7 +4963,7 @@ dependencies = [
 
 [[package]]
 name = "waydlp-installer-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "directories",
@@ -4986,7 +4986,7 @@ dependencies = [
 
 [[package]]
 name = "waydlp-installer-gui"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "eframe",
  "egui",
@@ -5001,7 +5001,7 @@ dependencies = [
 
 [[package]]
 name = "waydlp-platform"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "directories",
  "opener",
@@ -5014,7 +5014,7 @@ dependencies = [
 
 [[package]]
 name = "waydlp-theme"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "egui",
 ]

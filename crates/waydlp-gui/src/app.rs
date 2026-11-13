@@ -28,12 +28,24 @@ use waydlp_theme::{Accent, ThemeOptions, palette::*};
 pub enum BgMsg {
     Queue(QueueEvent),
     Tools(ToolStatus),
-    Analysis { seq: u64, result: Result<ProbeResult, FailureReport> },
+    Analysis {
+        seq: u64,
+        result: Result<ProbeResult, FailureReport>,
+    },
     Extractors(Result<Vec<String>, FailureReport>),
-    InstallProgress { tool: &'static str, done: u64, total: Option<u64> },
-    InstallDone { tool: &'static str, result: Result<String, String> },
+    InstallProgress {
+        tool: &'static str,
+        done: u64,
+        total: Option<u64>,
+    },
+    InstallDone {
+        tool: &'static str,
+        result: Result<String, String>,
+    },
     Update(Result<ReleaseInfo, String>),
     YtDlpLatest(Result<String, String>),
+    /// Result of the automatic (opt-in) daily yt-dlp check.
+    AutoYtDlpLatest(Result<String, String>),
 }
 
 pub enum Analysis {
@@ -112,6 +124,7 @@ pub struct WaydlpApp {
     pub yt_dlp_latest: Option<Result<String, String>>,
     pub install: Option<Install>,
     pub install_error: Option<String>,
+    auto_yt_dlp_checking: bool,
 
     pub toasts: Vec<Toast>,
     pub confirm: Option<Confirm>,
@@ -209,6 +222,7 @@ impl WaydlpApp {
             yt_dlp_latest: None,
             install: None,
             install_error: None,
+            auto_yt_dlp_checking: false,
             toasts,
             confirm: None,
             allow_quit: false,
@@ -521,6 +535,44 @@ impl WaydlpApp {
         });
     }
 
+    /// Age in days of the yt-dlp in use, from its date-based version.
+    pub fn yt_dlp_age_days(&self) -> Option<u64> {
+        let v = self.tools.as_ref()?.yt_dlp.as_ref()?.version.clone()?;
+        waydlp_engine::managed::yt_dlp_age_days(&v, std::time::SystemTime::now())
+    }
+
+    /// Opt-in: at most once a day, update the waydlp-managed yt-dlp when a
+    /// newer release exists. Copies owned by the system or a custom path are
+    /// never touched. Skipped while downloads run (the file is in use).
+    pub(crate) fn maybe_auto_update_yt_dlp(&mut self) {
+        if !self.settings.privacy.auto_update_yt_dlp || self.auto_yt_dlp_checking || self.install.is_some() {
+            return;
+        }
+        let managed = self
+            .tools
+            .as_ref()
+            .and_then(|t| t.yt_dlp.as_ref())
+            .is_some_and(|i| i.source == waydlp_engine::ToolSource::Managed);
+        if !managed || self.active_job_count() > 0 {
+            return;
+        }
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+        if self.settings.privacy.yt_dlp_checked_at.is_some_and(|t| now.saturating_sub(t) < 86_400) {
+            return;
+        }
+        self.auto_yt_dlp_checking = true;
+        self.settings.privacy.yt_dlp_checked_at = Some(now);
+        self.settings_changed();
+        let (tx, ctx) = (self.bg_tx.clone(), self.ctx.clone());
+        let bin = self.paths.bin_dir.clone();
+        self.rt.spawn(async move {
+            let m = waydlp_engine::managed::ManagedTools::new(waydlp_engine::http_client(), bin);
+            let r = m.latest_yt_dlp_version().await.map_err(|e| e.to_string());
+            let _ = tx.send(BgMsg::AutoYtDlpLatest(r));
+            ctx.request_repaint();
+        });
+    }
+
     pub fn load_sites(&mut self) {
         let Some(yt) = self.yt_dlp_path() else { return };
         if self.sites_loading {
@@ -561,6 +613,7 @@ impl WaydlpApp {
                         });
                     }
                     self.tools = Some(t);
+                    self.maybe_auto_update_yt_dlp();
                 }
                 BgMsg::Analysis { seq, result } => {
                     if let Analysis::Running { url, seq: s, .. } = &self.analysis
@@ -605,6 +658,26 @@ impl WaydlpApp {
                     self.update = Some(r);
                 }
                 BgMsg::YtDlpLatest(r) => self.yt_dlp_latest = Some(r),
+                BgMsg::AutoYtDlpLatest(r) => {
+                    self.auto_yt_dlp_checking = false;
+                    match r {
+                        Ok(latest) => {
+                            let installed = self
+                                .tools
+                                .as_ref()
+                                .and_then(|t| t.yt_dlp.as_ref())
+                                .and_then(|i| i.version.clone())
+                                .unwrap_or_default();
+                            if waydlp_engine::managed::yt_dlp_version_is_newer(&latest, &installed)
+                                && self.active_job_count() == 0
+                            {
+                                self.toast(format!("Updating yt-dlp to {latest}…"), ACCENT_HOVER);
+                                self.install_tool("yt-dlp");
+                            }
+                        }
+                        Err(e) => tracing::warn!("automatic yt-dlp check failed: {e}"),
+                    }
+                }
             }
         }
     }
@@ -696,10 +769,13 @@ impl WaydlpApp {
         {
             o.video.max_height = None;
         }
+        // Start from the preferred languages each time: narrowing the current
+        // options in place lost them for every later video, and an empty
+        // list silently fell back to English.
         let subs = info.subtitle_languages();
-        if !subs.is_empty() {
-            o.subtitles.languages.retain(|l| subs.contains(l));
-        }
+        let preferred = self.settings.default_options().subtitles.languages;
+        let available: Vec<String> = preferred.iter().filter(|l| subs.contains(*l)).cloned().collect();
+        o.subtitles.languages = if available.is_empty() { preferred } else { available };
     }
 
     fn handle_clipboard(&mut self) {

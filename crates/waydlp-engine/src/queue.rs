@@ -136,6 +136,7 @@ enum Cmd {
     Move(JobId, i32),
     Settings(QueueSettings),
     ClearFinished,
+    RetryFailed,
     PauseAll,
     ResumeAll,
     Shutdown(oneshot::Sender<()>),
@@ -144,7 +145,9 @@ enum Cmd {
 enum Internal {
     Event(JobId, u64, ProgressEvent),
     Exited(JobId, u64, RunOutcome),
-    RetryDue(JobId),
+    /// The run sequence the retry was scheduled for: a stale timer (the job
+    /// was paused, resumed and failed again meanwhile) must not fire early.
+    RetryDue(JobId, u64),
 }
 
 /// Cheap, clonable handle used by the UI and CLI.
@@ -183,6 +186,10 @@ impl QueueHandle {
     }
     pub fn clear_finished(&self) {
         let _ = self.tx.send(Cmd::ClearFinished);
+    }
+    /// Retry every failed job (each gets a fresh automatic-retry budget).
+    pub fn retry_failed(&self) {
+        let _ = self.tx.send(Cmd::RetryFailed);
     }
     pub fn pause_all(&self) {
         let _ = self.tx.send(Cmd::PauseAll);
@@ -364,6 +371,19 @@ impl Actor {
                     (self.sink)(QueueEvent::Removed(id));
                 }
                 self.emit_order();
+            }
+            Cmd::RetryFailed => {
+                for i in 0..self.jobs.len() {
+                    if self.jobs[i].snap.state == JobState::Failed {
+                        let j = &mut self.jobs[i];
+                        j.snap.state = JobState::Queued;
+                        j.snap.stage = "Waiting in queue".into();
+                        j.snap.error = None;
+                        j.snap.finished_at = None;
+                        j.snap.attempts = 0;
+                        self.emit(i);
+                    }
+                }
             }
             Cmd::PauseAll => {
                 let ids: Vec<JobId> =
@@ -621,9 +641,10 @@ impl Actor {
                             );
                             j.snap.error = Some(report);
                             let itx = self.itx.clone();
+                            let seq = j.run_seq;
                             tokio::spawn(async move {
                                 tokio::time::sleep(delay).await;
-                                let _ = itx.send(Internal::RetryDue(id));
+                                let _ = itx.send(Internal::RetryDue(id, seq));
                             });
                         } else {
                             j.snap.state = JobState::Failed;
@@ -635,8 +656,9 @@ impl Actor {
                     }
                 }
             }
-            Internal::RetryDue(id) => {
+            Internal::RetryDue(id, seq) => {
                 if let Some(i) = self.find(id)
+                    && self.jobs[i].run_seq == seq
                     && self.jobs[i].snap.state == JobState::WaitingRetry
                 {
                     self.jobs[i].snap.state = JobState::Queued;

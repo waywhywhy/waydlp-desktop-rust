@@ -217,6 +217,17 @@ async fn run(cli: Cli) -> Result<()> {
             for p in &t.problems {
                 println!("warning: {p}");
             }
+            if let Some(age) = t
+                .yt_dlp
+                .as_ref()
+                .and_then(|i| i.version.as_deref())
+                .and_then(|v| waydlp_engine::managed::yt_dlp_age_days(v, std::time::SystemTime::now()))
+                .filter(|a| *a > waydlp_engine::managed::YT_DLP_STALE_DAYS)
+            {
+                println!(
+                    "warning: yt-dlp is {age} days old; sites may block it. Update with: waydlp-cli install-tool yt-dlp"
+                );
+            }
         }
         Cmd::InstallTool { tool } => {
             let m = ManagedTools::new(http_client(), env.paths.bin_dir.clone());

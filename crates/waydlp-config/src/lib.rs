@@ -179,6 +179,11 @@ pub struct PrivacySettings {
     pub check_updates_on_start: bool,
     /// Load thumbnails from the media site during analysis/history.
     pub load_thumbnails: bool,
+    /// Opt-in: keep the waydlp-managed yt-dlp up to date (checks GitHub at
+    /// most once a day). Sites such as YouTube block outdated versions.
+    pub auto_update_yt_dlp: bool,
+    /// When the automatic yt-dlp check last ran (Unix seconds).
+    pub yt_dlp_checked_at: Option<u64>,
 }
 
 impl Default for PrivacySettings {
@@ -189,6 +194,8 @@ impl Default for PrivacySettings {
             clipboard_watch: false,
             check_updates_on_start: false,
             load_thumbnails: true,
+            auto_update_yt_dlp: false,
+            yt_dlp_checked_at: None,
         }
     }
 }

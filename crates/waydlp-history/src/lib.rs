@@ -115,6 +115,61 @@ pub struct HistoryStats {
 
 pub struct History {
     conn: Connection,
+    /// This process's session: rows it inserts carry the id, and the lock
+    /// file stays exclusively locked while the process lives. The GUI and
+    /// the CLI share one database, so "in progress" rows are only
+    /// interrupted once their owning process is gone.
+    session: Option<Session>,
+}
+
+struct Session {
+    id: String,
+    dir: PathBuf,
+    _lock: std::fs::File,
+}
+
+impl Session {
+    fn create(dir: &Path) -> Option<Self> {
+        std::fs::create_dir_all(dir).ok()?;
+        // Remove lock files of processes that exited without cleaning up
+        // (crash, forced quit). Their rows, if any, keep a session id whose
+        // lock file is missing, which counts as "not running".
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for e in entries.flatten() {
+                if let Some(name) = e.file_name().to_str().and_then(|n| n.strip_suffix(".lock")) {
+                    session_alive(dir, name);
+                }
+            }
+        }
+        let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).ok()?.as_nanos();
+        let id = format!("{}-{nanos}", std::process::id());
+        let file = std::fs::File::create(dir.join(format!("{id}.lock"))).ok()?;
+        file.try_lock().ok()?;
+        Some(Self { id, dir: dir.to_path_buf(), _lock: file })
+    }
+}
+
+impl Drop for Session {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(self.dir.join(format!("{}.lock", self.id)));
+    }
+}
+
+/// Whether the process that owns `session` is still running (its lock is held).
+fn session_alive(dir: &Path, session: &str) -> bool {
+    if !session.chars().all(|c| c.is_ascii_digit() || c == '-') {
+        return false;
+    }
+    let path = dir.join(format!("{session}.lock"));
+    let Ok(f) = std::fs::OpenOptions::new().read(true).write(true).open(&path) else { return false };
+    match f.try_lock() {
+        Ok(()) => {
+            drop(f);
+            let _ = std::fs::remove_file(&path);
+            false
+        }
+        Err(_) => true,
+    }
 }
 
 impl History {
@@ -123,14 +178,15 @@ impl History {
             std::fs::create_dir_all(dir)?;
         }
         let conn = Connection::open(path)?;
-        Self::init(conn)
+        let sessions = path.parent().unwrap_or(Path::new(".")).join("history-sessions");
+        Self::init(conn, Session::create(&sessions))
     }
 
     pub fn open_in_memory() -> Result<Self, HistoryError> {
-        Self::init(Connection::open_in_memory()?)
+        Self::init(Connection::open_in_memory()?, None)
     }
 
-    fn init(conn: Connection) -> Result<Self, HistoryError> {
+    fn init(conn: Connection, session: Option<Session>) -> Result<Self, HistoryError> {
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "foreign_keys", "ON")?;
         conn.busy_timeout(std::time::Duration::from_secs(5))?;
@@ -163,14 +219,22 @@ impl History {
             )?;
             conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
         }
-        // Rows left "in progress" by a crash or forced quit are interrupted.
-        Ok(Self { conn })
+        // Added without a schema bump: older waydlp versions name their
+        // columns explicitly, so they keep working with this database.
+        let has_session: bool =
+            conn.query_row("SELECT COUNT(*) FROM pragma_table_info('downloads') WHERE name = 'session'", [], |r| {
+                r.get::<_, i64>(0).map(|n| n > 0)
+            })?;
+        if !has_session {
+            conn.execute("ALTER TABLE downloads ADD COLUMN session TEXT", [])?;
+        }
+        Ok(Self { conn, session })
     }
 
     pub fn insert(&self, e: &NewEntry) -> Result<i64, HistoryError> {
         self.conn.execute(
-            "INSERT INTO downloads (title, url, site, created_at, format, options_json, is_playlist, status, thumbnail)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            "INSERT INTO downloads (title, url, site, created_at, format, options_json, is_playlist, status, thumbnail, session)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             params![
                 e.title,
                 e.url,
@@ -181,6 +245,7 @@ impl History {
                 e.is_playlist as i64,
                 EntryStatus::InProgress.as_str(),
                 e.thumbnail,
+                self.session.as_ref().map(|s| s.id.as_str()),
             ],
         )?;
         Ok(self.conn.last_insert_rowid())
@@ -282,13 +347,28 @@ impl History {
         )?)
     }
 
-    /// Mark rows left "in progress" by a previous session as interrupted
-    /// (cancelled) so the UI never shows phantom active downloads.
+    /// Mark rows left "in progress" by a process that has exited as
+    /// interrupted (cancelled) so the UI never shows phantom active downloads.
+    /// Rows of running processes (another window, the CLI) are left alone.
     pub fn mark_interrupted(&self) -> Result<usize, HistoryError> {
-        Ok(self.conn.execute(
-            "UPDATE downloads SET status = 'cancelled', error = 'Interrupted: waydlp was closed before the download finished.' WHERE status = 'in_progress'",
-            [],
-        )?)
+        let mut stmt = self.conn.prepare("SELECT DISTINCT session FROM downloads WHERE status = 'in_progress'")?;
+        let sessions = stmt.query_map([], |r| r.get::<_, Option<String>>(0))?.collect::<Result<Vec<_>, _>>()?;
+        let mut n = 0;
+        for session in sessions {
+            let dead = match (&session, &self.session) {
+                (None, _) => true,
+                (Some(s), Some(own)) => s != &own.id && !session_alive(&own.dir, s),
+                (Some(_), None) => false,
+            };
+            if dead {
+                n += self.conn.execute(
+                    "UPDATE downloads SET status = 'cancelled', error = 'Interrupted: waydlp was closed before the download finished.'
+                     WHERE status = 'in_progress' AND session IS ?1",
+                    params![session],
+                )?;
+            }
+        }
+        Ok(n)
     }
 
     pub fn stats(&self) -> Result<HistoryStats, HistoryError> {
@@ -478,6 +558,32 @@ mod tests {
         assert_eq!(h.get(a).unwrap().unwrap().status, EntryStatus::Cancelled);
         assert_eq!(h.clear().unwrap(), 2);
         assert!(h.list(&HistoryFilter::default()).unwrap().is_empty());
+    }
+
+    #[test]
+    fn interrupted_skips_running_processes() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("history.db");
+        let other = History::open(&db).unwrap(); // e.g. the CLI, still downloading
+        let running = other.insert(&entry("Running", "x")).unwrap();
+        let gone = History::open(&db).unwrap();
+        let orphan = gone.insert(&entry("Orphan", "x")).unwrap();
+        drop(gone); // that process exited mid-download
+
+        let gui = History::open(&db).unwrap();
+        assert_eq!(gui.mark_interrupted().unwrap(), 1);
+        assert_eq!(gui.get(running).unwrap().unwrap().status, EntryStatus::InProgress);
+        assert_eq!(gui.get(orphan).unwrap().unwrap().status, EntryStatus::Cancelled);
+        drop(other);
+        assert_eq!(gui.mark_interrupted().unwrap(), 1);
+        assert_eq!(gui.get(running).unwrap().unwrap().status, EntryStatus::Cancelled);
+
+        // A crashed process leaves an unlocked lock file; the next start removes it.
+        let sessions = dir.path().join("history-sessions");
+        std::fs::write(sessions.join("1-1.lock"), "").unwrap();
+        let _next = History::open(&db).unwrap();
+        assert!(!sessions.join("1-1.lock").exists());
+        assert_eq!(std::fs::read_dir(&sessions).unwrap().count(), 2); // gui + next
     }
 
     #[test]

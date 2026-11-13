@@ -30,7 +30,7 @@ see what's really available, pick a format and quality, and download.
 ## Install
 
 Release artifacts are published on the [Releases page](https://github.com/waywhywhy/waydlp-desktop-rust/releases).
-Download **0.1.0** from the [release page](https://github.com/waywhywhy/waydlp-desktop-rust/releases/tag/v0.1.0), or see [Building from source](#building-from-source).
+Download **0.2.0** from the [release page](https://github.com/waywhywhy/waydlp-desktop-rust/releases/tag/v0.2.0), or see [Building from source](#building-from-source).
 
 | Platform | Artifact | Notes |
 |---|---|---|
@@ -74,12 +74,12 @@ Download [install.ps1](install.ps1) or [install.sh](install.sh) to inspect it or
 version/directory:
 
 ```powershell
-.\install.ps1 -Version 0.1.0 -InstallDir 'C:\Tools\waydlp' -NoMenu
+.\install.ps1 -Version 0.2.0 -InstallDir 'C:\Tools\waydlp' -NoMenu
 & "$env:LOCALAPPDATA\Programs\waydlp\waydlp-installer.exe" verify # default location
 ```
 
 ```sh
-sh install.sh --version 0.1.0 --dir "$HOME/Apps/waydlp" --no-menu
+sh install.sh --version 0.2.0 --dir "$HOME/Apps/waydlp" --no-menu
 "$HOME/Apps/waydlp/waydlp-installer" verify
 "$HOME/Apps/waydlp/waydlp-installer" uninstall
 ```

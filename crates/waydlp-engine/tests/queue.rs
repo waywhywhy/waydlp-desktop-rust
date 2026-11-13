@@ -14,6 +14,10 @@ use waydlp_core::media::ProbeResult;
 use waydlp_core::options::DownloadOptions;
 use waydlp_engine::queue::*;
 
+/// Up to 60 s per wait (polled every 25 ms): parallel tests on a busy machine
+/// can take well over the previous 10 s to start processes.
+const WAIT_STEPS: usize = 2400;
+
 fn fake() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_waydlp-fake-yt-dlp"))
 }
@@ -75,7 +79,7 @@ impl Harness {
 
     /// Wait until the job has reported real progress (the process is up).
     async fn wait_progress(&self, id: JobId) {
-        for _ in 0..400 {
+        for _ in 0..WAIT_STEPS {
             if *self.progress_seen.lock().unwrap().get(&id).unwrap_or(&0) > 0 {
                 return;
             }
@@ -85,7 +89,7 @@ impl Harness {
     }
 
     async fn wait_for(&self, id: JobId, want: JobState) -> JobSnapshot {
-        for _ in 0..400 {
+        for _ in 0..WAIT_STEPS {
             if let Some(s) = self.snap(id)
                 && s.state == want
             {
@@ -218,4 +222,21 @@ async fn missing_binary_is_reported() {
     .await
     .unwrap_err();
     assert_eq!(e.kind, ErrorKind::YtDlpMissing);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn retry_failed_restarts_only_failed_jobs() {
+    // No automatic retries: the flaky job fails once and stays failed.
+    let h = Harness::new(2, 0);
+    let flaky = h.handle.add(h.spec("flaky"));
+    let ok = h.handle.add(h.spec("ok"));
+    h.wait_for(flaky, JobState::Failed).await;
+    let done = h.wait_for(ok, JobState::Completed).await;
+
+    h.handle.retry_failed();
+    let s = h.wait_for(flaky, JobState::Completed).await;
+    assert_eq!(s.attempts, 1, "manual retry gets a fresh budget");
+    assert!(s.error.is_none());
+    // Finished jobs are left alone.
+    assert_eq!(h.snap(ok).unwrap().finished_at, done.finished_at);
 }

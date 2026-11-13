@@ -61,6 +61,9 @@ impl WaydlpApp {
         });
         if self.settings != before {
             self.settings_changed();
+            if self.settings.privacy.auto_update_yt_dlp && !before.privacy.auto_update_yt_dlp {
+                self.maybe_auto_update_yt_dlp();
+            }
         }
     }
 
@@ -444,6 +447,14 @@ impl WaydlpApp {
             "Contacts GitHub once per start. Off by default.",
             |ui| {
                 ui.checkbox(&mut s.check_updates_on_start, "");
+            },
+        );
+        setting_row(
+            ui,
+            "Keep yt-dlp up to date automatically",
+            "Updates the copy managed by waydlp when a new release exists. Contacts GitHub at most once a day. Off by default.",
+            |ui| {
+                ui.checkbox(&mut s.auto_update_yt_dlp, "");
             },
         );
         ui.separator();

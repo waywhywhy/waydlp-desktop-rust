@@ -8,6 +8,41 @@ use waydlp_history::HistoryFilter;
 use waydlp_theme::palette::*;
 
 impl WaydlpApp {
+    /// Warn when the yt-dlp in use is older than yt-dlp's own 90-day limit:
+    /// sites (YouTube especially) then fail with errors such as HTTP 403.
+    /// Works offline: the age comes from the date-based version number.
+    pub fn stale_yt_dlp_banner(&mut self, ui: &mut Ui) {
+        let Some(age) = self.yt_dlp_age_days() else { return };
+        if age <= waydlp_engine::managed::YT_DLP_STALE_DAYS {
+            return;
+        }
+        let accent = self.accent();
+        let managed = self
+            .tools
+            .as_ref()
+            .and_then(|t| t.yt_dlp.as_ref())
+            .is_some_and(|i| i.source == waydlp_engine::ToolSource::Managed);
+        waydlp_theme::card().show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.label(RichText::new(format!("yt-dlp is {age} days old")).strong().color(WARNING));
+            ui.label(waydlp_theme::secondary(
+                "Websites change often and block outdated versions, so downloads may fail (for example with HTTP 403).",
+            ));
+            ui.horizontal(|ui| {
+                let label = if managed { "Update yt-dlp" } else { "Install an up-to-date managed copy" };
+                if waydlp_theme::primary_button_enabled(ui, accent, label, self.install.is_none()).clicked() {
+                    self.install_tool("yt-dlp");
+                }
+                if !managed {
+                    ui.label(waydlp_theme::muted(
+                        "The copy in use belongs to your system or a custom path; waydlp won't modify it.",
+                    ));
+                }
+            });
+        });
+        ui.add_space(16.0);
+    }
+
     pub fn page_home(&mut self, ui: &mut Ui) {
         let accent = self.accent();
         waydlp_theme::title(ui, "Download anything you're allowed to.");
@@ -50,6 +85,7 @@ impl WaydlpApp {
             }
         });
         ui.add_space(16.0);
+        self.stale_yt_dlp_banner(ui);
 
         // Active downloads + stats.
         ui.columns(2, |cols| {

@@ -218,6 +218,10 @@ const RULES: &[(ErrorKind, &[&str])] = &[
             "update to the latest version",
             "confirm you are on the latest version",
             "unable to parse",
+            // Sites (notably YouTube) answer an outdated yt-dlp with 403;
+            // automatic retries never help, updating does.
+            "http error 403",
+            "is older than 90 days",
         ],
     ),
 ];
@@ -352,5 +356,17 @@ mod tests {
         assert!(!r.contains("secret"));
         assert!(r.contains("http://***@proxy.example:8080"));
         assert!(r.ends_with("ok"));
+    }
+
+    #[test]
+    fn http_403_from_outdated_yt_dlp_is_not_transient() {
+        let out = "WARNING: Your yt-dlp version (2025.11.12) is older than 90 days!
+                   ERROR: unable to download video data: HTTP Error 403: Forbidden";
+        assert_eq!(classify(out), ErrorKind::ExtractorOutdated);
+        assert!(!classify(out).is_transient());
+        // A specific error line still wins over the old-version warning.
+        let private = "WARNING: version is older than 90 days
+ERROR: [youtube] x: Private video";
+        assert_eq!(classify(private), ErrorKind::Private);
     }
 }

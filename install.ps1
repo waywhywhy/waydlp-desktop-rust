@@ -2,7 +2,7 @@
 .SYNOPSIS
 Installs a checksum-verified waydlp release for the current Windows user.
 .EXAMPLE
-& .\install.ps1 -Version 0.1.0 -InstallDir 'C:\Tools\waydlp'
+& .\install.ps1 -Version 0.2.0 -InstallDir 'C:\Tools\waydlp'
 #>
 [CmdletBinding()]
 param(

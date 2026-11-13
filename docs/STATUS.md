@@ -1,4 +1,4 @@
-# Project status (0.1.0)
+# Project status (0.2.0)
 
 This page records what is implemented, what was actually verified and how, and what is still open. It is updated with each milestone.
 
@@ -43,4 +43,4 @@ These are implemented but haven't been run in this environment:
 * No system-tray icon or download scheduling yet.
 * Managed FFmpeg downloads are Windows-only by design; Linux uses the distribution's FFmpeg.
 * The UI is English-only. Strings are centralised so translations can be added.
-* GitHub release 0.1.0 is published. AUR and Flathub submissions remain prepared but unpublished.
+* GitHub releases 0.1.0 and 0.2.0 are published. AUR and Flathub submissions remain prepared but unpublished.

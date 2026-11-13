@@ -1,7 +1,7 @@
 # Maintainer: waydlp contributors
 # Builds waydlp from the tagged source release.
 pkgname=waydlp
-pkgver=0.1.0
+pkgver=0.2.0
 pkgrel=1
 pkgdesc='Fast, private media downloader powered by yt-dlp and FFmpeg (native Rust GUI)'
 arch=('x86_64' 'aarch64')

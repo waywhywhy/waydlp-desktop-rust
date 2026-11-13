@@ -24,7 +24,7 @@ pub enum UrlError {
 /// missing, and let the `url` crate canonicalise the host. We never strip
 /// query parameters, because many sites encode the media id there.
 pub fn validate_url(input: &str) -> Result<Url, UrlError> {
-    let trimmed = input.trim().trim_matches(|c| c == '"' || c == '\'' || c == '<' || c == '>').trim();
+    let trimmed = trim_link_punctuation(input.trim()).trim();
     if trimmed.is_empty() {
         return Err(UrlError::Empty);
     }
@@ -53,6 +53,27 @@ pub fn validate_url(input: &str) -> Result<Url, UrlError> {
         return Err(UrlError::LocalAddress);
     }
     Ok(url)
+}
+
+/// Remove punctuation that surrounding text leaves attached to a link, e.g.
+/// `(see https://x.com/v/1).` → `https://x.com/v/1`. Closing brackets are
+/// only removed when unbalanced, so `https://en.wikipedia.org/wiki/A_(b)` survives.
+fn trim_link_punctuation(s: &str) -> &str {
+    let mut t = s.trim_start_matches(['"', '\'', '<', '(', '[']);
+    while let Some(c) = t.chars().last() {
+        let unbalanced = |open: char| t.matches(c).count() > t.matches(open).count();
+        let strip = match c {
+            '.' | ',' | ';' | ':' | '!' | '?' | '"' | '\'' | '>' => true,
+            ')' => unbalanced('('),
+            ']' => unbalanced('['),
+            _ => false,
+        };
+        if !strip {
+            break;
+        }
+        t = &t[..t.len() - c.len_utf8()];
+    }
+    t
 }
 
 fn has_scheme(s: &str) -> bool {
@@ -197,6 +218,20 @@ mod tests {
         let s: Vec<_> = ok.iter().map(|u| u.as_str()).collect();
         assert_eq!(s, vec!["https://a.com/1", "https://b.com/2", "https://c.org/3"]);
         assert_eq!(bad, vec!["garbage"]);
+    }
+
+    #[test]
+    fn strips_sentence_punctuation() {
+        assert_eq!(validate_url("(https://youtu.be/jNQXAC9IVRw).").unwrap().as_str(), "https://youtu.be/jNQXAC9IVRw");
+        assert_eq!(validate_url("https://vimeo.com/1,").unwrap().as_str(), "https://vimeo.com/1");
+        assert_eq!(
+            validate_url("https://en.wikipedia.org/wiki/Foo_(bar)").unwrap().as_str(),
+            "https://en.wikipedia.org/wiki/Foo_(bar)"
+        );
+        let (ok, bad) = extract_urls("Watch (https://a.com/1). Also https://b.com/2!");
+        let s: Vec<_> = ok.iter().map(|u| u.as_str()).collect();
+        assert_eq!(s, vec!["https://a.com/1", "https://b.com/2"]);
+        assert_eq!(bad, vec!["Watch", "Also"]);
     }
 
     #[test]
